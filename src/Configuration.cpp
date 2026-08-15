@@ -456,6 +456,20 @@ bool ConfigurationClass::write()
     JsonObject powermeter_udp_victron = powermeter["udp_victron"].to<JsonObject>();
     serializePowerMeterUdpVictronConfig(config.PowerMeter.UdpVictron, powermeter_udp_victron);
 
+    JsonObject powerHistory = doc["power_history"].to<JsonObject>();
+    powerHistory["enabled"] = config.PowerHistory.Enabled;
+    powerHistory["power_meter_enabled"] = config.PowerHistory.PowerMeterEnabled;
+    powerHistory["inverter_total_enabled"] = config.PowerHistory.InverterTotalEnabled;
+    powerHistory["interval_minutes"] = config.PowerHistory.IntervalMinutes;
+    JsonArray powerHistoryInverters = powerHistory["inverter_serials"].to<JsonArray>();
+    for (uint8_t i = 0; i < INV_MAX_COUNT; ++i) {
+        if (config.PowerHistory.InverterSerials[i] != 0) {
+            char serial[17];
+            snprintf(serial, sizeof(serial), "%" PRIx64, config.PowerHistory.InverterSerials[i]);
+            powerHistoryInverters.add(serial);
+        }
+    }
+
     JsonObject powerlimiter = doc["powerlimiter"].to<JsonObject>();
     serializePowerLimiterConfig(config.PowerLimiter, powerlimiter);
 
@@ -812,7 +826,10 @@ bool ConfigurationClass::read()
     config.WiFi.Dns1[3] = wifi_dns1[3];
 
     IPAddress wifi_dns2;
-    wifi_dns2.fromString(wifi["dns2"] | "");
+    wifi_dns2.fromString(wifi["dns2"] | WIFI_DNS2);
+    if (wifi_dns2 == IPAddress(0, 0, 0, 0)) {
+        wifi_dns2.fromString(WIFI_DNS2);
+    }
     config.WiFi.Dns2[0] = wifi_dns2[0];
     config.WiFi.Dns2[1] = wifi_dns2[1];
     config.WiFi.Dns2[2] = wifi_dns2[2];
@@ -946,6 +963,24 @@ bool ConfigurationClass::read()
     deserializePowerMeterHttpSmlConfig(powermeter["http_sml"], config.PowerMeter.HttpSml);
 
     deserializePowerMeterUdpVictronConfig(powermeter["udp_victron"], config.PowerMeter.UdpVictron);
+
+    JsonObject powerHistory = doc["power_history"];
+    config.PowerHistory.Enabled = powerHistory["enabled"] | POWER_HISTORY_ENABLED;
+    config.PowerHistory.PowerMeterEnabled = powerHistory["power_meter_enabled"] | POWER_HISTORY_POWERMETER_ENABLED;
+    config.PowerHistory.InverterTotalEnabled = powerHistory["inverter_total_enabled"] | POWER_HISTORY_INVERTER_TOTAL_ENABLED;
+    config.PowerHistory.IntervalMinutes = std::clamp<uint8_t>(powerHistory["interval_minutes"] | POWER_HISTORY_INTERVAL_MINUTES, 1, 60);
+    std::fill(std::begin(config.PowerHistory.InverterSerials), std::end(config.PowerHistory.InverterSerials), 0);
+    JsonArray powerHistoryInverters = powerHistory["inverter_serials"];
+    uint8_t powerHistoryInverterIndex = 0;
+    for (JsonVariant serialValue : powerHistoryInverters) {
+        if (powerHistoryInverterIndex >= INV_MAX_COUNT) {
+            break;
+        }
+        const char* serial = serialValue.as<const char*>();
+        if (serial != nullptr) {
+            config.PowerHistory.InverterSerials[powerHistoryInverterIndex++] = strtoull(serial, nullptr, 16);
+        }
+    }
 
     deserializePowerLimiterConfig(doc["powerlimiter"], config.PowerLimiter);
 

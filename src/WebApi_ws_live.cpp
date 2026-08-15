@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <ctime>
+#include <new>
 
 #undef TAG
 static const char* TAG = "webapi";
@@ -29,7 +30,7 @@ WebApiWsLiveClass::WebApiWsLiveClass()
     : _ws("/livedata")
     , _wsCleanupTask(1 * TASK_SECOND, TASK_FOREVER, std::bind(&WebApiWsLiveClass::wsCleanupTaskCb, this))
     , _sendDataTask(1 * TASK_SECOND, TASK_FOREVER, std::bind(&WebApiWsLiveClass::sendDataTaskCb, this))
-    , _powerHistoryTask(POWER_HISTORY_SAMPLE_MINUTES * TASK_MINUTE, TASK_FOREVER, std::bind(&WebApiWsLiveClass::powerHistoryTaskCb, this))
+    , _powerHistoryTask(POWER_HISTORY_INTERVAL_MINUTES * TASK_MINUTE, TASK_FOREVER, std::bind(&WebApiWsLiveClass::powerHistoryTaskCb, this))
 {
 }
 
@@ -43,6 +44,11 @@ void WebApiWsLiveClass::init(AsyncWebServer& server, Scheduler& scheduler)
     using std::placeholders::_6;
 
     server.on("/api/livedata/status", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiWsLiveClass::onLivedataStatus, this, _1)));
+    // ESPAsyncWebServer treats plain URI matchers as backward-compatible prefixes.
+    // Register the more specific config endpoint first so it is not swallowed by
+    // /api/livedata/power-history.
+    server.on("/api/livedata/power-history/config", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiWsLiveClass::onPowerHistoryConfigGet, this, _1)));
+    server.on("/api/livedata/power-history/config", HTTP_POST, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiWsLiveClass::onPowerHistoryConfigPost, this, _1)));
     server.on("/api/livedata/power-history", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiWsLiveClass::onPowerHistoryStatus, this, _1)));
 
     server.addHandler(&_ws);
@@ -55,12 +61,73 @@ void WebApiWsLiveClass::init(AsyncWebServer& server, Scheduler& scheduler)
     _sendDataTask.enable();
 
     scheduler.addTask(_powerHistoryTask);
-    _powerHistoryTask.enable();
+    configurePowerHistory();
     _simpleDigestAuth.setUsername(AUTH_USERNAME);
     _simpleDigestAuth.setRealm("live websocket");
     _simpleDigestAuth.setAuthType(AsyncAuthType::AUTH_DIGEST);
 
     reload();
+}
+
+void WebApiWsLiveClass::configurePowerHistory()
+{
+    _powerHistoryTask.disable();
+
+    const auto& config = Configuration.get().PowerHistory;
+    const uint8_t intervalMinutes = std::clamp<uint8_t>(config.IntervalMinutes, 1, 60);
+    uint64_t serials[INV_MAX_COUNT] = {};
+    uint8_t inverterCount = 0;
+    for (uint8_t i = 0; i < INV_MAX_COUNT; ++i) {
+        if (config.InverterSerials[i] != 0) {
+            serials[inverterCount++] = config.InverterSerials[i];
+        }
+    }
+
+    const uint8_t seriesCount = inverterCount + (config.InverterTotalEnabled ? 1 : 0);
+    const bool hasSource = config.PowerMeterEnabled || seriesCount > 0;
+    const uint16_t capacity = 24U * 60U / intervalMinutes;
+    std::unique_ptr<uint32_t[]> timestamps;
+    std::unique_ptr<int32_t[]> gridPower;
+    std::unique_ptr<int16_t[]> inverterPower;
+    if (config.Enabled && hasSource) {
+        timestamps.reset(new (std::nothrow) uint32_t[capacity]);
+        if (config.PowerMeterEnabled) {
+            gridPower.reset(new (std::nothrow) int32_t[capacity]);
+        }
+        if (seriesCount > 0) {
+            inverterPower.reset(new (std::nothrow) int16_t[capacity * seriesCount]);
+        }
+    }
+
+    const bool allocationSucceeded = timestamps
+        && (!config.PowerMeterEnabled || gridPower)
+        && (seriesCount == 0 || inverterPower);
+
+    {
+        std::lock_guard<std::mutex> lock(_powerHistoryMutex);
+        _powerHistoryTimestamps = std::move(timestamps);
+        _powerHistoryGridPower = std::move(gridPower);
+        _powerHistoryInverterPower = std::move(inverterPower);
+        std::copy(std::begin(serials), std::end(serials), std::begin(_powerHistorySerials));
+        _powerHistoryWriteIndex = 0;
+        _powerHistoryCount = 0;
+        _powerHistoryCapacity = allocationSucceeded ? capacity : 0;
+        _powerHistoryInverterCount = inverterCount;
+        _powerHistorySeriesCount = seriesCount;
+        _powerHistoryIntervalMinutes = intervalMinutes;
+        _powerHistoryPowerMeterEnabled = config.PowerMeterEnabled;
+        _powerHistoryInverterTotalEnabled = config.InverterTotalEnabled;
+        _powerHistoryEnabled = config.Enabled && hasSource && allocationSucceeded;
+    }
+
+    if (config.Enabled && hasSource && !allocationSucceeded) {
+        ESP_LOGE(TAG, "Could not allocate power history buffer");
+        return;
+    }
+    if (_powerHistoryEnabled) {
+        _powerHistoryTask.setInterval(intervalMinutes * TASK_MINUTE);
+        _powerHistoryTask.enable();
+    }
 }
 
 void WebApiWsLiveClass::powerHistoryTaskCb()
@@ -71,60 +138,67 @@ void WebApiWsLiveClass::powerHistoryTaskCb()
         return;
     }
 
-    const uint8_t inverterCount = std::min<uint8_t>(Hoymiles.getNumInverters(), INV_MAX_COUNT);
-    uint64_t serials[INV_MAX_COUNT] = {};
-    for (uint8_t i = 0; i < inverterCount; ++i) {
-        auto inverter = Hoymiles.getInverterByPos(i);
-        if (inverter != nullptr) {
-            serials[i] = inverter->serial();
-        }
-    }
-
     std::lock_guard<std::mutex> lock(_powerHistoryMutex);
-
-    bool inverterLayoutChanged = inverterCount != _powerHistoryInverterCount;
-    for (uint8_t i = 0; i < inverterCount && !inverterLayoutChanged; ++i) {
-        inverterLayoutChanged = serials[i] != _powerHistorySerials[i];
+    if (!_powerHistoryEnabled || _powerHistoryCapacity == 0) {
+        return;
     }
 
-    if (inverterLayoutChanged) {
-        _powerHistoryWriteIndex = 0;
-        _powerHistoryCount = 0;
-        _powerHistoryInverterCount = inverterCount;
-        std::copy(std::begin(serials), std::end(serials), std::begin(_powerHistorySerials));
+    const uint16_t pointIndex = _powerHistoryWriteIndex;
+    _powerHistoryTimestamps[pointIndex] = timestamp;
+    if (_powerHistoryPowerMeterEnabled) {
+        _powerHistoryGridPower[pointIndex] = Configuration.get().PowerMeter.Enabled
+            ? static_cast<int32_t>(std::lround(PowerMeter.getPowerTotal()))
+            : POWER_HISTORY_INVALID_GRID;
     }
 
-    auto& point = _powerHistory[_powerHistoryWriteIndex];
-    point.Timestamp = timestamp;
-    point.GridPower = Configuration.get().PowerMeter.Enabled
-        ? static_cast<int32_t>(std::lround(PowerMeter.getPowerTotal()))
-        : POWER_HISTORY_INVALID_GRID;
-    std::fill(std::begin(point.InverterPower), std::end(point.InverterPower), POWER_HISTORY_INVALID_INVERTER);
-
-    for (uint8_t i = 0; i < inverterCount; ++i) {
-        auto inverter = Hoymiles.getInverterByPos(i);
+    auto readInverterPower = [](const std::shared_ptr<InverterAbstract>& inverter, int32_t& power) {
         if (inverter == nullptr || inverter->Statistics()->getLastUpdate() == 0) {
-            continue;
+            return false;
         }
 
-        float power = 0.0f;
+        float measuredPower = 0.0f;
         bool hasPower = false;
         for (auto channel : inverter->Statistics()->getChannelsByType(TYPE_AC)) {
             if (!inverter->Statistics()->hasChannelFieldValue(TYPE_AC, channel, FLD_PAC)) {
                 continue;
             }
-            power += inverter->Statistics()->getChannelFieldValue(TYPE_AC, channel, FLD_PAC);
+            measuredPower += inverter->Statistics()->getChannelFieldValue(TYPE_AC, channel, FLD_PAC);
             hasPower = true;
         }
+        power = static_cast<int32_t>(std::lround(measuredPower));
+        return hasPower;
+    };
 
-        if (hasPower) {
-            const auto rounded = static_cast<int32_t>(std::lround(power));
-            point.InverterPower[i] = static_cast<int16_t>(std::clamp<int32_t>(rounded, -32767, 32767));
+    for (uint8_t i = 0; i < _powerHistoryInverterCount; ++i) {
+        auto& value = _powerHistoryInverterPower[pointIndex * _powerHistorySeriesCount + i];
+        value = POWER_HISTORY_INVALID_INVERTER;
+        auto inverter = Hoymiles.getInverterBySerial(_powerHistorySerials[i]);
+        int32_t power = 0;
+        if (readInverterPower(inverter, power)) {
+            value = static_cast<int16_t>(std::clamp<int32_t>(power, -32767, 32767));
         }
     }
 
-    _powerHistoryWriteIndex = (_powerHistoryWriteIndex + 1) % POWER_HISTORY_MAX_POINTS;
-    _powerHistoryCount = std::min<uint16_t>(_powerHistoryCount + 1, POWER_HISTORY_MAX_POINTS);
+    if (_powerHistoryInverterTotalEnabled) {
+        auto& totalValue = _powerHistoryInverterPower[
+            pointIndex * _powerHistorySeriesCount + _powerHistoryInverterCount];
+        totalValue = POWER_HISTORY_INVALID_INVERTER;
+        int32_t totalPower = 0;
+        bool hasTotalPower = false;
+        for (uint8_t i = 0; i < Hoymiles.getNumInverters(); ++i) {
+            int32_t inverterPower = 0;
+            if (readInverterPower(Hoymiles.getInverterByPos(i), inverterPower)) {
+                totalPower += inverterPower;
+                hasTotalPower = true;
+            }
+        }
+        if (hasTotalPower) {
+            totalValue = static_cast<int16_t>(std::clamp<int32_t>(totalPower, -32767, 32767));
+        }
+    }
+
+    _powerHistoryWriteIndex = (_powerHistoryWriteIndex + 1) % _powerHistoryCapacity;
+    _powerHistoryCount = std::min<uint16_t>(_powerHistoryCount + 1, _powerHistoryCapacity);
 }
 
 void WebApiWsLiveClass::reload()
@@ -447,16 +521,44 @@ void WebApiWsLiveClass::onPowerHistoryStatus(AsyncWebServerRequest* request)
         hours = 12;
     }
 
-    // Keep the payload below roughly 360 points, independent of the platform's sample interval.
-    const uint16_t samplesInRange = hours * 60U / POWER_HISTORY_SAMPLE_MINUTES;
-    const uint8_t bucketSize = std::max<uint8_t>(1, (samplesInRange + 359) / 360);
     const uint32_t now = static_cast<uint32_t>(std::time(nullptr));
     const uint32_t cutoff = now > hours * 60U * 60U ? now - hours * 60U * 60U : 0;
 
     std::lock_guard<std::mutex> lock(_powerHistoryMutex);
-    auto* response = request->beginResponseStream("application/json", 32 * 1024);
+    // Keep the complete JSON response inside one small contiguous buffer. A 32 KiB
+    // response buffer is too large for a fragmented classic ESP32 heap and causes
+    // operator new[] to abort. Account conservatively for escaped inverter names
+    // and the number of numeric series when selecting the output resolution.
+    static constexpr size_t responseBufferSize = 8U * 1024U;
+    const size_t metadataBudget = 512U
+        + _powerHistoryInverterCount * (96U + INV_MAX_NAME_STRLEN * 6U);
+    const size_t pointBudget = 16U
+        + (_powerHistoryPowerMeterEnabled ? 12U : 0U)
+        + _powerHistorySeriesCount * 12U;
+    const size_t pointSpace = responseBufferSize > metadataBudget
+        ? responseBufferSize - metadataBudget
+        : 1024U;
+    const uint16_t responsePointLimit = std::clamp<uint16_t>(
+        static_cast<uint16_t>(pointSpace / std::max<size_t>(pointBudget, 1U)), 12U, 240U);
+    const uint16_t samplesInRange = hours * 60U / _powerHistoryIntervalMinutes;
+    const uint8_t bucketSize = std::max<uint8_t>(
+        1, (samplesInRange + responsePointLimit - 1) / responsePointLimit);
+
+    AsyncResponseStream* response;
+    try {
+        response = request->beginResponseStream("application/json", responseBufferSize);
+    } catch (const std::bad_alloc&) {
+        ESP_LOGE(TAG, "Could not allocate power history response buffer");
+        request->send(503, "text/plain", "Not enough memory for power history response");
+        return;
+    }
     response->addHeader("Cache-Control", "no-store");
-    response->printf("{\"sample_interval\":%u,\"hours\":%u,\"inverters\":[", POWER_HISTORY_SAMPLE_MINUTES * 60U, hours);
+    response->printf("{\"enabled\":%s,\"power_meter\":%s,\"inverter_total\":%s,\"sample_interval\":%u,\"hours\":%u,\"inverters\":[",
+        _powerHistoryEnabled ? "true" : "false",
+        _powerHistoryPowerMeterEnabled ? "true" : "false",
+        _powerHistoryInverterTotalEnabled ? "true" : "false",
+        _powerHistoryIntervalMinutes * 60U,
+        hours);
 
     for (uint8_t i = 0; i < _powerHistoryInverterCount; ++i) {
         if (i > 0) {
@@ -482,8 +584,8 @@ void WebApiWsLiveClass::onPowerHistoryStatus(AsyncWebServerRequest* request)
 
     int64_t gridSum = 0;
     uint8_t gridCount = 0;
-    int64_t inverterSums[INV_MAX_COUNT] = {};
-    uint8_t inverterCounts[INV_MAX_COUNT] = {};
+    int64_t inverterSums[INV_MAX_COUNT + 1] = {};
+    uint8_t inverterCounts[INV_MAX_COUNT + 1] = {};
     uint8_t bucketSamples = 0;
     uint32_t bucketTimestamp = 0;
     bool firstPoint = true;
@@ -496,13 +598,16 @@ void WebApiWsLiveClass::onPowerHistoryStatus(AsyncWebServerRequest* request)
             response->print(',');
         }
         firstPoint = false;
-        response->printf("[%" PRIu32 ",", bucketTimestamp);
-        if (gridCount == 0) {
-            response->print("null");
-        } else {
-            response->print(static_cast<int32_t>(std::lround(static_cast<double>(gridSum) / gridCount)));
+        response->printf("[%" PRIu32, bucketTimestamp);
+        if (_powerHistoryPowerMeterEnabled) {
+            response->print(',');
+            if (gridCount == 0) {
+                response->print("null");
+            } else {
+                response->print(static_cast<int32_t>(std::lround(static_cast<double>(gridSum) / gridCount)));
+            }
         }
-        for (uint8_t inverterIndex = 0; inverterIndex < _powerHistoryInverterCount; ++inverterIndex) {
+        for (uint8_t inverterIndex = 0; inverterIndex < _powerHistorySeriesCount; ++inverterIndex) {
             response->print(',');
             if (inverterCounts[inverterIndex] == 0) {
                 response->print("null");
@@ -519,24 +624,28 @@ void WebApiWsLiveClass::onPowerHistoryStatus(AsyncWebServerRequest* request)
         bucketSamples = 0;
     };
 
-    const uint16_t oldestIndex = (_powerHistoryWriteIndex + POWER_HISTORY_MAX_POINTS - _powerHistoryCount) % POWER_HISTORY_MAX_POINTS;
+    const uint16_t oldestIndex = _powerHistoryCapacity == 0
+        ? 0
+        : (_powerHistoryWriteIndex + _powerHistoryCapacity - _powerHistoryCount) % _powerHistoryCapacity;
     for (uint16_t offset = 0; offset < _powerHistoryCount; ++offset) {
-        const auto& point = _powerHistory[(oldestIndex + offset) % POWER_HISTORY_MAX_POINTS];
-        if (point.Timestamp < cutoff) {
+        const uint16_t pointIndex = (oldestIndex + offset) % _powerHistoryCapacity;
+        const uint32_t timestamp = _powerHistoryTimestamps[pointIndex];
+        if (timestamp < cutoff) {
             continue;
         }
 
-        bucketTimestamp = point.Timestamp;
+        bucketTimestamp = timestamp;
         ++bucketSamples;
-        if (point.GridPower != POWER_HISTORY_INVALID_GRID) {
-            gridSum += point.GridPower;
+        if (_powerHistoryPowerMeterEnabled && _powerHistoryGridPower[pointIndex] != POWER_HISTORY_INVALID_GRID) {
+            gridSum += _powerHistoryGridPower[pointIndex];
             ++gridCount;
         }
-        for (uint8_t inverterIndex = 0; inverterIndex < _powerHistoryInverterCount; ++inverterIndex) {
-            if (point.InverterPower[inverterIndex] == POWER_HISTORY_INVALID_INVERTER) {
+        for (uint8_t inverterIndex = 0; inverterIndex < _powerHistorySeriesCount; ++inverterIndex) {
+            const int16_t value = _powerHistoryInverterPower[pointIndex * _powerHistorySeriesCount + inverterIndex];
+            if (value == POWER_HISTORY_INVALID_INVERTER) {
                 continue;
             }
-            inverterSums[inverterIndex] += point.InverterPower[inverterIndex];
+            inverterSums[inverterIndex] += value;
             ++inverterCounts[inverterIndex];
         }
 
@@ -548,6 +657,79 @@ void WebApiWsLiveClass::onPowerHistoryStatus(AsyncWebServerRequest* request)
 
     response->print("]}");
     request->send(response);
+}
+
+void WebApiWsLiveClass::onPowerHistoryConfigGet(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) {
+        return;
+    }
+
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    auto& root = response->getRoot();
+    const auto& historyConfig = Configuration.get().PowerHistory;
+    root["enabled"] = historyConfig.Enabled;
+    root["power_meter_enabled"] = historyConfig.PowerMeterEnabled;
+    root["power_meter_available"] = Configuration.get().PowerMeter.Enabled;
+    root["inverter_total_enabled"] = historyConfig.InverterTotalEnabled;
+    root["interval_minutes"] = historyConfig.IntervalMinutes;
+
+    auto inverterArray = root["inverters"].to<JsonArray>();
+    for (uint8_t i = 0; i < Hoymiles.getNumInverters(); ++i) {
+        auto inverter = Hoymiles.getInverterByPos(i);
+        if (inverter == nullptr) {
+            continue;
+        }
+
+        auto item = inverterArray.add<JsonObject>();
+        item["serial"] = inverter->serialString();
+        item["name"] = inverter->name();
+        item["enabled"] = std::find(std::begin(historyConfig.InverterSerials), std::end(historyConfig.InverterSerials), inverter->serial())
+            != std::end(historyConfig.InverterSerials);
+    }
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+}
+
+void WebApiWsLiveClass::onPowerHistoryConfigPost(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) {
+        return;
+    }
+
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    JsonDocument root;
+    if (!WebApi.parseRequestData(request, response, root)) {
+        return;
+    }
+
+    {
+        auto guard = Configuration.getWriteGuard();
+        auto& config = guard.getConfig().PowerHistory;
+        config.Enabled = root["enabled"] | false;
+        config.PowerMeterEnabled = root["power_meter_enabled"] | false;
+        config.InverterTotalEnabled = root["inverter_total_enabled"] | false;
+        config.IntervalMinutes = std::clamp<uint8_t>(root["interval_minutes"] | POWER_HISTORY_INTERVAL_MINUTES, 1, 60);
+        std::fill(std::begin(config.InverterSerials), std::end(config.InverterSerials), 0);
+
+        uint8_t inverterIndex = 0;
+        for (JsonVariant item : root["inverters"].as<JsonArray>()) {
+            if (!(item["enabled"] | false) || inverterIndex >= INV_MAX_COUNT) {
+                continue;
+            }
+            const char* serial = item["serial"].as<const char*>();
+            if (serial != nullptr) {
+                const uint64_t parsedSerial = strtoull(serial, nullptr, 16);
+                if (parsedSerial != 0) {
+                    config.InverterSerials[inverterIndex++] = parsedSerial;
+                }
+            }
+        }
+    }
+
+    auto& retMsg = response->getRoot();
+    WebApi.writeConfig(retMsg);
+    configurePowerHistory();
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
 
 void WebApiWsLiveClass::onLivedataStatus(AsyncWebServerRequest* request)

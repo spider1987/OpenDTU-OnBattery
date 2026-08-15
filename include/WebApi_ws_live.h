@@ -6,6 +6,7 @@
 #include <ESPAsyncWebServer.h>
 #include <Hoymiles.h>
 #include <TaskSchedulerDeclarations.h>
+#include <memory>
 
 class WebApiWsLiveClass {
 public:
@@ -26,6 +27,8 @@ private:
 
     void onLivedataStatus(AsyncWebServerRequest* request);
     void onPowerHistoryStatus(AsyncWebServerRequest* request);
+    void onPowerHistoryConfigGet(AsyncWebServerRequest* request);
+    void onPowerHistoryConfigPost(AsyncWebServerRequest* request);
     void onWebsocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len);
 
     AsyncWebSocket _ws;
@@ -41,29 +44,25 @@ private:
 
     std::mutex _mutex;
 
-    // The classic ESP32 has a considerably smaller contiguous DRAM region than
-    // ESP32-S3. Three-minute samples retain 24 h while keeping enough runtime heap.
-#if CONFIG_IDF_TARGET_ESP32
-    static constexpr uint8_t POWER_HISTORY_SAMPLE_MINUTES = 3;
-#else
-    static constexpr uint8_t POWER_HISTORY_SAMPLE_MINUTES = 1;
-#endif
-    static constexpr uint16_t POWER_HISTORY_MAX_POINTS = 24 * 60 / POWER_HISTORY_SAMPLE_MINUTES;
     static constexpr int16_t POWER_HISTORY_INVALID_INVERTER = INT16_MIN;
     static constexpr int32_t POWER_HISTORY_INVALID_GRID = INT32_MIN;
 
-    struct PowerHistoryPoint {
-        uint32_t Timestamp = 0;
-        int32_t GridPower = POWER_HISTORY_INVALID_GRID;
-        int16_t InverterPower[INV_MAX_COUNT] = {};
-    };
-
-    PowerHistoryPoint _powerHistory[POWER_HISTORY_MAX_POINTS];
+    std::unique_ptr<uint32_t[]> _powerHistoryTimestamps;
+    std::unique_ptr<int32_t[]> _powerHistoryGridPower;
+    std::unique_ptr<int16_t[]> _powerHistoryInverterPower;
     uint64_t _powerHistorySerials[INV_MAX_COUNT] = {};
     uint16_t _powerHistoryWriteIndex = 0;
     uint16_t _powerHistoryCount = 0;
+    uint16_t _powerHistoryCapacity = 0;
     uint8_t _powerHistoryInverterCount = 0;
+    uint8_t _powerHistorySeriesCount = 0;
+    uint8_t _powerHistoryIntervalMinutes = 5;
+    bool _powerHistoryEnabled = false;
+    bool _powerHistoryPowerMeterEnabled = false;
+    bool _powerHistoryInverterTotalEnabled = false;
     std::mutex _powerHistoryMutex;
+
+    void configurePowerHistory();
 
     Task _wsCleanupTask;
     void wsCleanupTaskCb();

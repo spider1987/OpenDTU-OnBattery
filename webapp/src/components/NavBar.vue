@@ -32,15 +32,18 @@
                     <li class="nav-item dropdown">
                         <a
                             class="nav-link dropdown-toggle"
+                            :class="{ active: isSettingsRoute }"
                             href="#"
-                            id="navbarScrollingDropdown"
+                            id="settingsDropdown"
+                            ref="settingsDropdownToggle"
                             role="button"
                             data-bs-toggle="dropdown"
                             aria-expanded="false"
                         >
                             {{ $t('menu.Settings') }}
                         </a>
-                        <ul class="dropdown-menu" aria-labelledby="navbarScrollingDropdown">
+                        <ul class="dropdown-menu app-dropdown settings-menu" aria-labelledby="settingsDropdown">
+                            <li class="menu-section-title">{{ $t('menu.ConnectivityGroup') }}</li>
                             <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/settings/network">{{
                                     $t('menu.NetworkSettings')
@@ -57,11 +60,6 @@
                                 }}</router-link>
                             </li>
                             <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/inverter"
-                                    >{{ $t('menu.InverterSettings') }}
-                                </router-link>
-                            </li>
-                            <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/settings/security"
                                     >{{ $t('menu.SecuritySettings') }}
                                 </router-link>
@@ -69,6 +67,12 @@
                             <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/settings/logging"
                                     >{{ $t('menu.LoggingSettings') }}
+                                </router-link>
+                            </li>
+                            <li class="menu-section-title">{{ $t('menu.EnergyGroup') }}</li>
+                            <li>
+                                <router-link @click="onClick" class="dropdown-item" to="/settings/inverter"
+                                    >{{ $t('menu.InverterSettings') }}
                                 </router-link>
                             </li>
                             <li>
@@ -87,8 +91,13 @@
                                 }}</router-link>
                             </li>
                             <li>
+                                <router-link @click="onClick" class="dropdown-item" to="/settings/powerhistory">{{
+                                    $t('menu.PowerHistorySettings')
+                                }}</router-link>
+                            </li>
+                            <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/settings/powerlimiter"
-                                    >Dynamic Power Limiter</router-link
+                                    >{{ $t('menu.PowerLimiterSettings') }}</router-link
                                 >
                             </li>
                             <li>
@@ -101,14 +110,13 @@
                                     $t('menu.AcChargerSettings')
                                 }}</router-link>
                             </li>
+                            <li class="menu-section-title">{{ $t('menu.SystemGroup') }}</li>
                             <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/settings/device">{{
                                     $t('menu.DeviceManager')
                                 }}</router-link>
                             </li>
-                            <li>
-                                <hr class="dropdown-divider" />
-                            </li>
+                            <li class="menu-section-title">{{ $t('menu.MaintenanceGroup') }}</li>
                             <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/settings/config">{{
                                     $t('menu.ConfigManagement')
@@ -129,15 +137,18 @@
                     <li class="nav-item dropdown">
                         <a
                             class="nav-link dropdown-toggle"
+                            :class="{ active: isInfoRoute }"
                             href="#"
-                            id="navbarScrollingDropdown"
+                            id="infoDropdown"
+                            ref="infoDropdownToggle"
                             role="button"
                             data-bs-toggle="dropdown"
                             aria-expanded="false"
                         >
                             {{ $t('menu.Info') }}
                         </a>
-                        <ul class="dropdown-menu" aria-labelledby="navbarScrollingDropdown">
+                        <ul class="dropdown-menu app-dropdown info-menu" aria-labelledby="infoDropdown">
+                            <li class="menu-section-title">{{ $t('menu.StatusGroup') }}</li>
                             <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/info/system">{{
                                     $t('menu.System')
@@ -158,9 +169,7 @@
                                     $t('menu.MQTT')
                                 }}</router-link>
                             </li>
-                            <li>
-                                <hr class="dropdown-divider" />
-                            </li>
+                            <li class="menu-section-title">{{ $t('menu.DiagnosticsGroup') }}</li>
                             <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/info/console">{{
                                     $t('menu.Console')
@@ -191,6 +200,7 @@
 <script lang="ts">
 import { isLoggedIn, logout } from '@/utils/authentication';
 import { BIconEgg, BIconSun, BIconTree, BIconBatteryCharging } from 'bootstrap-icons-vue';
+import { Dropdown } from 'bootstrap';
 import { defineComponent } from 'vue';
 import LocaleSwitcher from './LocaleSwitcher.vue';
 import ThemeSwitcher from './ThemeSwitcher.vue';
@@ -208,22 +218,34 @@ export default defineComponent({
         return {
             isLogged: isLoggedIn(),
             now: {} as Date,
+            clockInterval: 0,
         };
     },
     created() {
-        this.$emitter.on('logged-in', () => {
-            this.isLogged = this.isLoggedIn();
-        });
-        this.$emitter.on('logged-out', () => {
-            this.isLogged = this.isLoggedIn();
-        });
+        this.$emitter.on('logged-in', this.updateLoginState);
+        this.$emitter.on('logged-out', this.updateLoginState);
 
         this.now = new Date();
-        setInterval(() => {
+        this.clockInterval = setInterval(() => {
             this.now = new Date();
         }, 10000);
     },
+    unmounted() {
+        this.$emitter.off('logged-in', this.updateLoginState);
+        this.$emitter.off('logged-out', this.updateLoginState);
+        clearInterval(this.clockInterval);
+    },
     computed: {
+        isSettingsRoute() {
+            return (
+                this.$route.path.startsWith('/settings/') ||
+                this.$route.path.startsWith('/firmware/') ||
+                this.$route.path.startsWith('/maintenance/')
+            );
+        },
+        isInfoRoute() {
+            return this.$route.path.startsWith('/info/');
+        },
         isXmas() {
             return this.now.getMonth() + 1 == 12 && this.now.getDate() >= 24 && this.now.getDate() <= 26;
         },
@@ -239,6 +261,9 @@ export default defineComponent({
     methods: {
         isLoggedIn,
         logout,
+        updateLoginState() {
+            this.isLogged = this.isLoggedIn();
+        },
         signin(e: Event) {
             e.preventDefault();
             this.$router.push('/login');
@@ -250,6 +275,13 @@ export default defineComponent({
             this.$router.push('/');
         },
         onClick() {
+            const dropdownToggles = [this.$refs.settingsDropdownToggle, this.$refs.infoDropdownToggle];
+            dropdownToggles.forEach((toggle) => {
+                if (toggle instanceof HTMLElement) {
+                    Dropdown.getInstance(toggle)?.hide();
+                }
+            });
+
             if (this.$refs.navbarCollapse) {
                 (this.$refs.navbarCollapse as HTMLElement).classList.remove('show');
             }
@@ -297,5 +329,99 @@ export default defineComponent({
 .nav-link.router-link-active:not(.dropdown-toggle) {
     color: var(--bs-navbar-active-color);
     background: rgba(255, 255, 255, 0.07);
+}
+
+.nav-link.active {
+    color: var(--bs-navbar-active-color);
+    background: rgba(var(--bs-primary-rgb), 0.1);
+}
+
+.app-dropdown {
+    margin-top: 0.55rem !important;
+    padding: 0.65rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.85rem;
+    background: var(--bs-body-bg);
+    box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.22);
+}
+
+.settings-menu {
+    width: min(44rem, calc(100vw - 2rem));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.2rem 0.65rem;
+}
+
+.settings-menu.show {
+    display: grid;
+}
+
+.info-menu {
+    width: min(22rem, calc(100vw - 2rem));
+}
+
+.menu-section-title {
+    grid-column: 1 / -1;
+    margin: 0.35rem 0.35rem 0.15rem;
+    padding: 0.35rem 0.5rem;
+    color: var(--bs-secondary-color);
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.menu-section-title:first-child {
+    margin-top: 0;
+}
+
+.app-dropdown .dropdown-item {
+    position: relative;
+    min-height: 2.45rem;
+    display: flex;
+    align-items: center;
+    padding: 0.55rem 0.75rem 0.55rem 1.65rem;
+    border-radius: 0.55rem;
+    color: var(--bs-body-color);
+    font-weight: 550;
+}
+
+.app-dropdown .dropdown-item::before {
+    position: absolute;
+    left: 0.75rem;
+    width: 0.38rem;
+    height: 0.38rem;
+    content: '';
+    border-radius: 50%;
+    background: var(--bs-primary);
+    opacity: 0.75;
+}
+
+.app-dropdown .dropdown-item:hover,
+.app-dropdown .dropdown-item:focus,
+.app-dropdown .dropdown-item.router-link-active {
+    color: var(--bs-emphasis-color);
+    background: rgba(var(--bs-primary-rgb), 0.12);
+}
+
+.app-dropdown .dropdown-item.router-link-active::before {
+    opacity: 1;
+    box-shadow: 0 0 0 0.24rem rgba(var(--bs-primary-rgb), 0.14);
+}
+
+@media (max-width: 767.98px) {
+    .app-dropdown,
+    .settings-menu,
+    .info-menu {
+        width: 100%;
+        max-height: 65vh;
+        overflow-y: auto;
+        box-shadow: none;
+    }
+
+    .settings-menu.show {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
 }
 </style>

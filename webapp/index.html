@@ -9,10 +9,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
       (() => {
-        const stored = localStorage.getItem('theme') || 'auto';
-        const theme = stored === 'auto'
-          ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-          : stored;
+        const stored = localStorage.getItem('theme');
+        const theme = stored === 'oled-night' ? 'oled-night' : 'dark';
+        if (stored !== theme) localStorage.setItem('theme', theme);
         document.documentElement.setAttribute('data-bs-theme', theme);
       })();
     </script>

@@ -1,5 +1,5 @@
 <template>
-    <section class="card power-history-card mt-3" aria-labelledby="power-history-title">
+    <section v-if="history.enabled" class="card power-history-card mt-3" aria-labelledby="power-history-title">
         <div class="card-header power-history-header">
             <div>
                 <h2 id="power-history-title" class="h5 mb-1">{{ $t('home.PowerHistory') }}</h2>
@@ -83,6 +83,9 @@ interface HistoryInverter {
 }
 
 interface PowerHistory {
+    enabled: boolean;
+    power_meter: boolean;
+    inverter_total: boolean;
     sample_interval: number;
     hours: number;
     inverters: HistoryInverter[];
@@ -98,6 +101,9 @@ interface ChartSeries {
 }
 
 const EMPTY_HISTORY: PowerHistory = {
+    enabled: false,
+    power_meter: false,
+    inverter_total: false,
     sample_interval: 60,
     hours: 24,
     inverters: [],
@@ -144,16 +150,29 @@ export default defineComponent({
         },
         chartSeries(): ChartSeries[] {
             const definitions = [
-                {
-                    key: 'grid',
-                    label: this.$t('home.NetworkPower'),
-                    color: 'var(--history-grid-power)',
-                },
+                ...(this.history.power_meter
+                    ? [
+                          {
+                              key: 'grid',
+                              label: this.$t('home.NetworkPower'),
+                              color: 'var(--history-grid-power)',
+                          },
+                      ]
+                    : []),
                 ...this.history.inverters.map((inverter, index) => ({
                     key: inverter.serial,
                     label: inverter.name,
                     color: 'var(--history-inverter-' + (index % 10) + ')',
                 })),
+                ...(this.history.inverter_total
+                    ? [
+                          {
+                              key: 'inverter-total',
+                              label: this.$t('home.InverterTotal'),
+                              color: 'var(--history-inverter-' + (this.history.inverters.length % 10) + ')',
+                          },
+                      ]
+                    : []),
             ];
 
             return definitions.map((definition, seriesIndex) => {
@@ -161,7 +180,8 @@ export default defineComponent({
                 return {
                     ...definition,
                     path: this.createPath(values),
-                    lastValue: [...values].reverse().find((value): value is number => typeof value === 'number') ?? null,
+                    lastValue:
+                        [...values].reverse().find((value): value is number => typeof value === 'number') ?? null,
                 };
             });
         },
@@ -193,7 +213,6 @@ export default defineComponent({
     },
     mounted() {
         this.fetchHistory();
-        this.refreshTimer = window.setInterval(() => this.fetchHistory(false), 60_000);
     },
     beforeUnmount() {
         window.clearInterval(this.refreshTimer);
@@ -219,11 +238,20 @@ export default defineComponent({
                     throw new Error('HTTP ' + response.status);
                 }
                 this.history = (await response.json()) as PowerHistory;
+                this.scheduleRefresh();
             } catch (error) {
                 console.warn('Could not load power history', error);
             } finally {
                 this.loading = false;
             }
+        },
+        scheduleRefresh() {
+            window.clearInterval(this.refreshTimer);
+            if (!this.history.enabled) {
+                return;
+            }
+            const refreshMs = Math.max(60_000, this.history.sample_interval * 1000);
+            this.refreshTimer = window.setInterval(() => this.fetchHistory(false), refreshMs);
         },
         scaleX(timestamp: number): number {
             const range = this.timeRange.max - this.timeRange.min;
@@ -243,12 +271,7 @@ export default defineComponent({
                 }
                 const timestamp = Number(this.history.points[index]?.[0] ?? 0);
                 const command = segmentOpen ? 'L' : 'M';
-                path +=
-                    command +
-                    this.scaleX(timestamp).toFixed(1) +
-                    ',' +
-                    this.scaleY(value).toFixed(1) +
-                    ' ';
+                path += command + this.scaleX(timestamp).toFixed(1) + ',' + this.scaleY(value).toFixed(1) + ' ';
                 segmentOpen = true;
             });
             return path.trim();

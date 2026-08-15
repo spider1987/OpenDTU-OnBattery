@@ -464,6 +464,14 @@ struct CONFIG_T {
         PowerMeterUdpVictronConfig UdpVictron;
     } PowerMeter;
 
+    struct {
+        bool Enabled;
+        bool PowerMeterEnabled;
+        bool InverterTotalEnabled;
+        uint8_t IntervalMinutes;
+        uint64_t InverterSerials[INV_MAX_COUNT];
+    } PowerHistory;
+
     PowerLimiterConfig PowerLimiter;
 
     BatteryConfig Battery;

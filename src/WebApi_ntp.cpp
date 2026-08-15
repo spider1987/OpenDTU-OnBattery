@@ -12,6 +12,29 @@
 #include <AsyncJson.h>
 #include <MycilaNTP.h>
 
+namespace {
+// The NTP settings page only needs the selectable zone names. Keeping this
+// compact JSON document in flash avoids building the complete 462-entry
+// name-to-POSIX-spec map in the limited heap of a classic ESP32.
+static const char EUROPE_TIMEZONES_JSON[] PROGMEM = R"json([
+"Europe/Amsterdam","Europe/Andorra","Europe/Astrakhan","Europe/Athens",
+"Europe/Belgrade","Europe/Berlin","Europe/Bratislava","Europe/Brussels",
+"Europe/Bucharest","Europe/Budapest","Europe/Busingen","Europe/Chisinau",
+"Europe/Copenhagen","Europe/Dublin","Europe/Gibraltar","Europe/Guernsey",
+"Europe/Helsinki","Europe/Isle_of_Man","Europe/Istanbul","Europe/Jersey",
+"Europe/Kaliningrad","Europe/Kiev","Europe/Kirov","Europe/Lisbon",
+"Europe/Ljubljana","Europe/London","Europe/Luxembourg","Europe/Madrid",
+"Europe/Malta","Europe/Mariehamn","Europe/Minsk","Europe/Monaco",
+"Europe/Moscow","Europe/Oslo","Europe/Paris","Europe/Podgorica",
+"Europe/Prague","Europe/Riga","Europe/Rome","Europe/Samara",
+"Europe/San_Marino","Europe/Sarajevo","Europe/Saratov","Europe/Simferopol",
+"Europe/Skopje","Europe/Sofia","Europe/Stockholm","Europe/Tallinn",
+"Europe/Tirane","Europe/Ulyanovsk","Europe/Uzhgorod","Europe/Vaduz",
+"Europe/Vatican","Europe/Vienna","Europe/Vilnius","Europe/Volgograd",
+"Europe/Warsaw","Europe/Zagreb","Europe/Zaporozhye","Europe/Zurich"
+])json";
+}
+
 void WebApiNtpClass::init(AsyncWebServer& server, Scheduler& scheduler)
 {
     using std::placeholders::_1;
@@ -155,7 +178,7 @@ void WebApiNtpClass::onNtpTimeGet(AsyncWebServerRequest* request)
     AsyncJsonResponse* response = new AsyncJsonResponse();
     auto& root = response->getRoot();
 
-    struct tm timeinfo;
+    struct tm timeinfo {};
     if (!getLocalTime(&timeinfo, 5)) {
         root["ntp_status"] = false;
     } else {
@@ -278,10 +301,8 @@ void WebApiNtpClass::onNtpTimezonesGet(AsyncWebServerRequest* request)
         return;
     }
 
-    AsyncJsonResponse* response = new AsyncJsonResponse();
-    auto& root = response->getRoot();
-
-    Mycila::NTP.timezonesToJsonObject(root);
-
-    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+    auto* response = request->beginResponse(200, "application/json",
+        reinterpret_cast<const uint8_t*>(EUROPE_TIMEZONES_JSON), sizeof(EUROPE_TIMEZONES_JSON) - 1);
+    response->addHeader("Cache-Control", "private, max-age=86400");
+    request->send(response);
 }

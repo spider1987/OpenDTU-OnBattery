@@ -13,34 +13,13 @@
         </button>
         <ul class="dropdown-menu dropdown-menu-end theme-menu">
             <li>
-                <button
-                    type="button"
-                    class="dropdown-item d-flex align-items-center"
-                    data-bs-theme-value="light"
-                    aria-pressed="false"
-                >
-                    <BIconSunFill class="bi me-2 opacity-50 theme-icon" />
-                    {{ $t('localeswitcher.Light') }}
-                </button>
-            </li>
-            <li>
-                <button
-                    type="button"
-                    class="dropdown-item d-flex align-items-center"
-                    data-bs-theme-value="dark"
-                    aria-pressed="false"
-                >
+                <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="dark">
                     <BIconMoonStarsFill class="bi me-2 opacity-50 theme-icon" />
                     {{ $t('localeswitcher.Dark') }}
                 </button>
             </li>
             <li>
-                <button
-                    type="button"
-                    class="dropdown-item d-flex align-items-center"
-                    data-bs-theme-value="oled-night"
-                    aria-pressed="false"
-                >
+                <button type="button" class="dropdown-item d-flex align-items-center" data-bs-theme-value="oled-night">
                     <BIconMoonFill class="bi me-2 opacity-75 theme-icon text-info" />
                     <span>
                         <span class="d-block">{{ $t('localeswitcher.OledNight') }}</span>
@@ -48,133 +27,43 @@
                     </span>
                 </button>
             </li>
-            <li>
-                <button
-                    type="button"
-                    class="dropdown-item d-flex align-items-center"
-                    data-bs-theme-value="cyberpunk"
-                    aria-pressed="false"
-                >
-                    <BIconLightningChargeFill class="bi me-2 opacity-75 theme-icon text-warning" />
-                    <span>
-                        <span class="d-block">{{ $t('localeswitcher.Cyberpunk') }}</span>
-                        <small>{{ $t('localeswitcher.CyberpunkDescription') }}</small>
-                    </span>
-                </button>
-            </li>
-            <li v-for="theme in additionalThemes" :key="theme.value">
-                <button
-                    type="button"
-                    class="dropdown-item d-flex align-items-center"
-                    :data-bs-theme-value="theme.value"
-                    aria-pressed="false"
-                >
-                    <BIconCircleFill
-                        class="bi me-2 opacity-75 theme-icon theme-color-dot"
-                        :style="{ color: theme.color }"
-                    />
-                    <span>
-                        <span class="d-block">{{ $t(`localeswitcher.${theme.label}`) }}</span>
-                        <small>{{ $t(`localeswitcher.${theme.description}`) }}</small>
-                    </span>
-                </button>
-            </li>
-            <li><hr class="dropdown-divider" /></li>
-            <li>
-                <button
-                    type="button"
-                    class="dropdown-item d-flex align-items-center active"
-                    data-bs-theme-value="auto"
-                    aria-pressed="true"
-                >
-                    <BIconCircleHalf class="bi me-2 opacity-50 theme-icon" />
-                    {{ $t('localeswitcher.Auto') }}
-                </button>
-            </li>
         </ul>
     </li>
 </template>
 
 <script lang="ts">
+import { BIconCircleHalf, BIconMoonFill, BIconMoonStarsFill } from 'bootstrap-icons-vue';
 import { defineComponent } from 'vue';
-import {
-    BIconCircleFill,
-    BIconCircleHalf,
-    BIconLightningChargeFill,
-    BIconMoonFill,
-    BIconMoonStarsFill,
-    BIconSunFill,
-} from 'bootstrap-icons-vue';
 
 export default defineComponent({
     name: 'ThemeSwitcher',
-    components: {
-        BIconCircleFill,
-        BIconCircleHalf,
-        BIconLightningChargeFill,
-        BIconMoonFill,
-        BIconSunFill,
-        BIconMoonStarsFill,
-    },
+    components: { BIconCircleHalf, BIconMoonFill, BIconMoonStarsFill },
     data() {
-        return {
-            storedTheme: 'auto',
-            additionalThemes: [
-                { value: 'solar-command', label: 'SolarCommand', description: 'SolarCommandDescription', color: '#d4a72c' },
-                { value: 'industrial', label: 'Industrial', description: 'IndustrialDescription', color: '#f7c600' },
-                { value: 'minimal-light', label: 'MinimalLight', description: 'MinimalLightDescription', color: '#3282b8' },
-                { value: 'nature-energy', label: 'NatureEnergy', description: 'NatureEnergyDescription', color: '#79c267' },
-                { value: 'holographic', label: 'Holographic', description: 'HolographicDescription', color: '#9b7cff' },
-                { value: 'retro-terminal', label: 'RetroTerminal', description: 'RetroTerminalDescription', color: '#65ff8f' },
-            ],
-        };
+        return { storedTheme: 'dark' };
     },
     methods: {
-        getPreferredTheme() {
-            if (this.storedTheme) {
-                return this.storedTheme;
-            }
-            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        },
         setTheme(theme: string) {
-            const resolvedTheme =
-                theme === 'auto'
-                    ? window.matchMedia('(prefers-color-scheme: dark)').matches
-                        ? 'dark'
-                        : 'light'
-                    : theme;
-            document.documentElement.setAttribute('data-bs-theme', resolvedTheme);
+            document.documentElement.setAttribute('data-bs-theme', theme === 'oled-night' ? 'oled-night' : 'dark');
         },
         showActiveTheme(theme: string) {
             const activeThemeIcon = document.querySelector('.theme-icon-active');
-            const btnToActive = document.querySelector(`[data-bs-theme-value="${theme}"]`);
+            const btnToActive = document.querySelector('[data-bs-theme-value="' + theme + '"]');
             const svgOfActiveBtn = btnToActive?.querySelector('.theme-icon');
-
-            document.querySelectorAll('[data-bs-theme-value]').forEach((element) => {
-                element.classList.remove('active');
-            });
-
+            document.querySelectorAll('[data-bs-theme-value]').forEach((element) => element.classList.remove('active'));
             btnToActive?.classList.add('active');
-
             if (svgOfActiveBtn) {
-                activeThemeIcon?.replaceChildren('*', svgOfActiveBtn?.cloneNode(true));
+                activeThemeIcon?.replaceChildren('*', svgOfActiveBtn.cloneNode(true));
             }
         },
     },
     mounted() {
-        this.storedTheme = localStorage.getItem('theme') || 'auto';
-        this.setTheme(this.getPreferredTheme());
-        this.showActiveTheme(this.getPreferredTheme());
-
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-            if (this.storedTheme === 'auto') {
-                this.setTheme(this.getPreferredTheme());
-            }
-        });
-
+        this.storedTheme = localStorage.getItem('theme') === 'oled-night' ? 'oled-night' : 'dark';
+        localStorage.setItem('theme', this.storedTheme);
+        this.setTheme(this.storedTheme);
+        this.showActiveTheme(this.storedTheme);
         document.querySelectorAll('[data-bs-theme-value]').forEach((toggle) => {
             toggle.addEventListener('click', () => {
-                const theme = toggle.getAttribute('data-bs-theme-value') || 'auto';
+                const theme = toggle.getAttribute('data-bs-theme-value') === 'oled-night' ? 'oled-night' : 'dark';
                 localStorage.setItem('theme', theme);
                 this.storedTheme = theme;
                 this.setTheme(theme);
@@ -187,9 +76,7 @@ export default defineComponent({
 
 <style scoped>
 .theme-menu {
-    width: min(23rem, calc(100vw - 1rem));
-    max-height: calc(100vh - 5rem);
-    overflow-y: auto;
+    width: min(20rem, calc(100vw - 1rem));
 }
 
 .theme-menu .dropdown-item {
@@ -202,9 +89,5 @@ export default defineComponent({
     color: var(--bs-secondary-color);
     font-size: 0.7rem;
     line-height: 1.2;
-}
-
-.theme-color-dot {
-    flex: 0 0 auto;
 }
 </style>

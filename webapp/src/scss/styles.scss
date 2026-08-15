@@ -1,0 +1,742 @@
+// Import all of Bootstrap's CSS
+@import '~bootstrap/scss/bootstrap';
+
+:root {
+    --history-grid-power: #3b82f6;
+    --history-inverter-0: #f59e0b;
+    --history-inverter-1: #10b981;
+    --history-inverter-2: #ec4899;
+    --history-inverter-3: #06b6d4;
+    --history-inverter-4: #8b5cf6;
+    --history-inverter-5: #ef4444;
+    --history-inverter-6: #84cc16;
+    --history-inverter-7: #f97316;
+    --history-inverter-8: #14b8a6;
+    --history-inverter-9: #a855f7;
+}
+
+.container-fluid .row {
+    font-feature-settings: 'tnum';
+}
+
+@include media-breakpoint-up(sm) {
+    label.col-form-label,
+    label.form-check-label {
+        text-align: end;
+    }
+}
+
+table.table tr:last-child th,
+table.table tr:last-child td {
+    border-bottom: 0;
+}
+
+table.table {
+    margin-bottom: 0;
+}
+
+div.card.card-table {
+    // prevent tables in cards from
+    // messing up the bottom corner radii
+    overflow: hidden;
+}
+
+div.card.card-table tr > :first-child {
+    padding-left: var(--bs-card-cap-padding-x);
+}
+
+div.card.card-table tr > :last-child {
+    padding-right: var(--bs-card-cap-padding-x);
+}
+
+div.accordion-item.accordion-table tr > :first-child {
+    padding-left: var(--bs-accordion-btn-padding-x);
+}
+
+div.accordion-item.accordion-table div.accordion-body {
+    padding-top: 0;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+div.card.card-table div.card-body {
+    padding: 0;
+}
+
+div.card div.card-body > :last-child {
+    margin-bottom: auto !important;
+}
+
+div.card.card-table table .value {
+    text-align: right;
+    padding-right: 0;
+}
+
+// blend cards into tabbed navigation (device admin view)
+div.card-tabbed {
+    border-top: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+// Lightweight custom color modes. They only override Bootstrap's CSS
+// variables and therefore add no runtime work or additional assets.
+[data-bs-theme='oled-night'] {
+    color-scheme: dark;
+    --bs-body-color: #d9eeee;
+    --bs-body-color-rgb: 217, 238, 238;
+    --bs-body-bg: #000000;
+    --bs-body-bg-rgb: 0, 0, 0;
+    --bs-emphasis-color: #ffffff;
+    --bs-emphasis-color-rgb: 255, 255, 255;
+    --bs-secondary-color: rgba(217, 238, 238, 0.68);
+    --bs-secondary-color-rgb: 217, 238, 238;
+    --bs-secondary-bg: #090d0f;
+    --bs-secondary-bg-rgb: 9, 13, 15;
+    --bs-tertiary-color: rgba(217, 238, 238, 0.48);
+    --bs-tertiary-bg: #030607;
+    --bs-tertiary-bg-rgb: 3, 6, 7;
+    --bs-primary: #00dff5;
+    --bs-primary-rgb: 0, 223, 245;
+    --bs-link-color: #44eaff;
+    --bs-link-color-rgb: 68, 234, 255;
+    --bs-link-hover-color: #9af5ff;
+    --bs-link-hover-color-rgb: 154, 245, 255;
+    --bs-success: #35e897;
+    --bs-success-rgb: 53, 232, 151;
+    --bs-info: #00dff5;
+    --bs-info-rgb: 0, 223, 245;
+    --bs-warning: #ffc857;
+    --bs-warning-rgb: 255, 200, 87;
+    --bs-danger: #ff5b6e;
+    --bs-danger-rgb: 255, 91, 110;
+    --bs-border-color: #173036;
+    --bs-border-color-translucent: rgba(68, 234, 255, 0.14);
+    --bs-form-control-bg: #05090a;
+    --bs-form-control-disabled-bg: #0b1113;
+    --history-grid-power: #00dff5;
+    --history-inverter-0: #ffc857;
+    --history-inverter-1: #35e897;
+    --history-inverter-2: #ff5b9d;
+}
+
+[data-bs-theme='cyberpunk'] {
+    color-scheme: dark;
+    --bs-body-color: #f5edff;
+    --bs-body-color-rgb: 245, 237, 255;
+    --bs-body-bg: #0d0715;
+    --bs-body-bg-rgb: 13, 7, 21;
+    --bs-emphasis-color: #ffffff;
+    --bs-emphasis-color-rgb: 255, 255, 255;
+    --bs-secondary-color: rgba(245, 237, 255, 0.7);
+    --bs-secondary-color-rgb: 245, 237, 255;
+    --bs-secondary-bg: #1c1029;
+    --bs-secondary-bg-rgb: 28, 16, 41;
+    --bs-tertiary-color: rgba(245, 237, 255, 0.5);
+    --bs-tertiary-bg: #140b20;
+    --bs-tertiary-bg-rgb: 20, 11, 32;
+    --bs-primary: #ff2bd6;
+    --bs-primary-rgb: 255, 43, 214;
+    --bs-link-color: #16e8ff;
+    --bs-link-color-rgb: 22, 232, 255;
+    --bs-link-hover-color: #8af5ff;
+    --bs-link-hover-color-rgb: 138, 245, 255;
+    --bs-success: #39f99d;
+    --bs-success-rgb: 57, 249, 157;
+    --bs-info: #16e8ff;
+    --bs-info-rgb: 22, 232, 255;
+    --bs-warning: #ffe66d;
+    --bs-warning-rgb: 255, 230, 109;
+    --bs-danger: #ff386d;
+    --bs-danger-rgb: 255, 56, 109;
+    --bs-border-color: #503069;
+    --bs-border-color-translucent: rgba(255, 43, 214, 0.18);
+    --bs-form-control-bg: #160c23;
+    --bs-form-control-disabled-bg: #21132f;
+    --history-grid-power: #16e8ff;
+    --history-inverter-0: #ffe66d;
+    --history-inverter-1: #39f99d;
+    --history-inverter-2: #ff2bd6;
+}
+
+[data-bs-theme='solar-command'] {
+    color-scheme: dark;
+    --bs-body-color: #e7eceb;
+    --bs-body-color-rgb: 231, 236, 235;
+    --bs-body-bg: #111719;
+    --bs-body-bg-rgb: 17, 23, 25;
+    --bs-emphasis-color: #fffaf0;
+    --bs-secondary-color: rgba(231, 236, 235, 0.66);
+    --bs-secondary-bg: #1b2527;
+    --bs-secondary-bg-rgb: 27, 37, 39;
+    --bs-tertiary-bg: #172023;
+    --bs-tertiary-bg-rgb: 23, 32, 35;
+    --bs-primary: #cda349;
+    --bs-primary-rgb: 205, 163, 73;
+    --bs-link-color: #54bbb5;
+    --bs-link-hover-color: #91d7d2;
+    --bs-success: #70b995;
+    --bs-success-rgb: 112, 185, 149;
+    --bs-info: #3aa9ad;
+    --bs-info-rgb: 58, 169, 173;
+    --bs-warning: #e1b955;
+    --bs-warning-rgb: 225, 185, 85;
+    --bs-danger: #d66a68;
+    --bs-danger-rgb: 214, 106, 104;
+    --bs-border-color: #334649;
+    --history-grid-power: #43b6b3;
+    --history-inverter-0: #dfb852;
+    --history-inverter-1: #7ec6a2;
+    --history-inverter-2: #d7835f;
+}
+
+[data-bs-theme='industrial'] {
+    color-scheme: dark;
+    --bs-body-color: #e8e9e7;
+    --bs-body-color-rgb: 232, 233, 231;
+    --bs-body-bg: #1a1d20;
+    --bs-body-bg-rgb: 26, 29, 32;
+    --bs-emphasis-color: #ffffff;
+    --bs-secondary-color: rgba(232, 233, 231, 0.65);
+    --bs-secondary-bg: #2a2f34;
+    --bs-secondary-bg-rgb: 42, 47, 52;
+    --bs-tertiary-bg: #23282c;
+    --bs-tertiary-bg-rgb: 35, 40, 44;
+    --bs-primary: #f7c600;
+    --bs-primary-rgb: 247, 198, 0;
+    --bs-link-color: #ffd83d;
+    --bs-link-hover-color: #ffe783;
+    --bs-success: #77b255;
+    --bs-success-rgb: 119, 178, 85;
+    --bs-info: #6aa7c2;
+    --bs-info-rgb: 106, 167, 194;
+    --bs-warning: #f7c600;
+    --bs-warning-rgb: 247, 198, 0;
+    --bs-danger: #e04b3f;
+    --bs-danger-rgb: 224, 75, 63;
+    --bs-border-color: #50575d;
+    --history-grid-power: #f7c600;
+    --history-inverter-0: #6aa7c2;
+    --history-inverter-1: #77b255;
+    --history-inverter-2: #e36b43;
+}
+
+[data-bs-theme='minimal-light'] {
+    color-scheme: light;
+    --bs-body-color: #26333b;
+    --bs-body-color-rgb: 38, 51, 59;
+    --bs-body-bg: #f4f7f8;
+    --bs-body-bg-rgb: 244, 247, 248;
+    --bs-emphasis-color: #13242d;
+    --bs-emphasis-color-rgb: 19, 36, 45;
+    --bs-secondary-color: rgba(38, 51, 59, 0.65);
+    --bs-secondary-bg: #e8eef0;
+    --bs-secondary-bg-rgb: 232, 238, 240;
+    --bs-tertiary-bg: #ffffff;
+    --bs-tertiary-bg-rgb: 255, 255, 255;
+    --bs-primary: #287fa8;
+    --bs-primary-rgb: 40, 127, 168;
+    --bs-link-color: #176f98;
+    --bs-link-hover-color: #0d506f;
+    --bs-success: #438b68;
+    --bs-success-rgb: 67, 139, 104;
+    --bs-info: #3b91ad;
+    --bs-info-rgb: 59, 145, 173;
+    --bs-warning: #c28a21;
+    --bs-warning-rgb: 194, 138, 33;
+    --bs-danger: #c94f55;
+    --bs-danger-rgb: 201, 79, 85;
+    --bs-border-color: #d1dde1;
+    --history-grid-power: #287fa8;
+    --history-inverter-0: #d8932c;
+    --history-inverter-1: #438b68;
+    --history-inverter-2: #ae5b92;
+}
+
+[data-bs-theme='nature-energy'] {
+    color-scheme: dark;
+    --bs-body-color: #e7f0e7;
+    --bs-body-color-rgb: 231, 240, 231;
+    --bs-body-bg: #0c1916;
+    --bs-body-bg-rgb: 12, 25, 22;
+    --bs-emphasis-color: #f6fff5;
+    --bs-secondary-color: rgba(231, 240, 231, 0.68);
+    --bs-secondary-bg: #193028;
+    --bs-secondary-bg-rgb: 25, 48, 40;
+    --bs-tertiary-bg: #12261f;
+    --bs-tertiary-bg-rgb: 18, 38, 31;
+    --bs-primary: #79c267;
+    --bs-primary-rgb: 121, 194, 103;
+    --bs-link-color: #55c9bd;
+    --bs-link-hover-color: #91e1d8;
+    --bs-success: #79c267;
+    --bs-success-rgb: 121, 194, 103;
+    --bs-info: #45aaa2;
+    --bs-info-rgb: 69, 170, 162;
+    --bs-warning: #f1c55b;
+    --bs-warning-rgb: 241, 197, 91;
+    --bs-danger: #dc6c62;
+    --bs-danger-rgb: 220, 108, 98;
+    --bs-border-color: #2a5144;
+    --history-grid-power: #45aaa2;
+    --history-inverter-0: #f1c55b;
+    --history-inverter-1: #79c267;
+    --history-inverter-2: #dc8562;
+}
+
+[data-bs-theme='holographic'] {
+    color-scheme: dark;
+    --bs-body-color: #edf7ff;
+    --bs-body-color-rgb: 237, 247, 255;
+    --bs-body-bg: #090d1b;
+    --bs-body-bg-rgb: 9, 13, 27;
+    --bs-emphasis-color: #ffffff;
+    --bs-secondary-color: rgba(237, 247, 255, 0.68);
+    --bs-secondary-bg: #171b34;
+    --bs-secondary-bg-rgb: 23, 27, 52;
+    --bs-tertiary-bg: #11162b;
+    --bs-tertiary-bg-rgb: 17, 22, 43;
+    --bs-primary: #8c7bff;
+    --bs-primary-rgb: 140, 123, 255;
+    --bs-link-color: #52e5f2;
+    --bs-link-hover-color: #a7f7ff;
+    --bs-success: #55e7bd;
+    --bs-success-rgb: 85, 231, 189;
+    --bs-info: #52e5f2;
+    --bs-info-rgb: 82, 229, 242;
+    --bs-warning: #f3c6ff;
+    --bs-warning-rgb: 243, 198, 255;
+    --bs-danger: #ff6fbd;
+    --bs-danger-rgb: 255, 111, 189;
+    --bs-border-color: #424a82;
+    --history-grid-power: #52e5f2;
+    --history-inverter-0: #a98cff;
+    --history-inverter-1: #55e7bd;
+    --history-inverter-2: #ff79c6;
+}
+
+[data-bs-theme='retro-terminal'] {
+    color-scheme: dark;
+    --bs-body-color: #83f59d;
+    --bs-body-color-rgb: 131, 245, 157;
+    --bs-body-bg: #020704;
+    --bs-body-bg-rgb: 2, 7, 4;
+    --bs-emphasis-color: #b7ffc7;
+    --bs-secondary-color: rgba(131, 245, 157, 0.62);
+    --bs-secondary-bg: #07150c;
+    --bs-secondary-bg-rgb: 7, 21, 12;
+    --bs-tertiary-bg: #041008;
+    --bs-tertiary-bg-rgb: 4, 16, 8;
+    --bs-primary: #65ff8f;
+    --bs-primary-rgb: 101, 255, 143;
+    --bs-link-color: #65ff8f;
+    --bs-link-hover-color: #b7ffc7;
+    --bs-success: #65ff8f;
+    --bs-success-rgb: 101, 255, 143;
+    --bs-info: #65ffcf;
+    --bs-info-rgb: 101, 255, 207;
+    --bs-warning: #d7ff65;
+    --bs-warning-rgb: 215, 255, 101;
+    --bs-danger: #ff6f6f;
+    --bs-danger-rgb: 255, 111, 111;
+    --bs-border-color: #1c5c2c;
+    --history-grid-power: #65ff8f;
+    --history-inverter-0: #d7ff65;
+    --history-inverter-1: #65ffcf;
+    --history-inverter-2: #a7ff65;
+}
+
+:is(
+    [data-bs-theme='solar-command'],
+    [data-bs-theme='industrial'],
+    [data-bs-theme='nature-energy'],
+    [data-bs-theme='holographic'],
+    [data-bs-theme='retro-terminal']
+) .app-navbar :is(.navbar-brand, .app-brand-name, .nav-link, .dropdown-toggle) {
+    color: var(--bs-body-color) !important;
+}
+
+:is(
+    [data-bs-theme='solar-command'],
+    [data-bs-theme='industrial'],
+    [data-bs-theme='nature-energy'],
+    [data-bs-theme='holographic'],
+    [data-bs-theme='retro-terminal']
+) .app-navbar .nav-link:hover {
+    color: var(--bs-emphasis-color) !important;
+}
+
+:is(
+    [data-bs-theme='solar-command'],
+    [data-bs-theme='industrial'],
+    [data-bs-theme='nature-energy'],
+    [data-bs-theme='holographic'],
+    [data-bs-theme='retro-terminal']
+) .alert-danger {
+    color: #ffdadd;
+    background-color: #3c1820;
+    border-color: #8d3d4b;
+}
+
+:is(
+    [data-bs-theme='solar-command'],
+    [data-bs-theme='industrial'],
+    [data-bs-theme='minimal-light'],
+    [data-bs-theme='nature-energy'],
+    [data-bs-theme='holographic'],
+    [data-bs-theme='retro-terminal']
+) .btn-primary {
+    --bs-btn-color: var(--bs-body-bg);
+    --bs-btn-bg: var(--bs-primary);
+    --bs-btn-border-color: var(--bs-primary);
+    --bs-btn-hover-color: var(--bs-body-bg);
+    --bs-btn-hover-bg: var(--bs-link-hover-color);
+    --bs-btn-hover-border-color: var(--bs-link-hover-color);
+    --bs-btn-active-color: var(--bs-body-bg);
+    --bs-btn-active-bg: var(--bs-primary);
+    --bs-btn-active-border-color: var(--bs-primary);
+}
+
+:is(
+    [data-bs-theme='solar-command'],
+    [data-bs-theme='industrial'],
+    [data-bs-theme='minimal-light'],
+    [data-bs-theme='nature-energy'],
+    [data-bs-theme='holographic'],
+    [data-bs-theme='retro-terminal']
+) .btn-outline-primary {
+    --bs-btn-color: var(--bs-primary);
+    --bs-btn-border-color: var(--bs-primary);
+    --bs-btn-hover-color: var(--bs-body-bg);
+    --bs-btn-hover-bg: var(--bs-primary);
+    --bs-btn-hover-border-color: var(--bs-primary);
+    --bs-btn-active-color: var(--bs-body-bg);
+    --bs-btn-active-bg: var(--bs-primary);
+    --bs-btn-active-border-color: var(--bs-primary);
+}
+
+[data-bs-theme='oled-night'] .app-navbar {
+    background-color: #020405 !important;
+}
+
+[data-bs-theme='oled-night'] .summary-card {
+    background: #000000 !important;
+    border-color: #12343a !important;
+    border-top-color: #00dff5 !important;
+}
+
+[data-bs-theme='oled-night'] .power-history-card,
+[data-bs-theme='oled-night'] .inverter-panel,
+[data-bs-theme='oled-night'] .channel-card,
+[data-bs-theme='oled-night'] .accordion-item {
+    background: #000000 !important;
+    border-color: #12343a !important;
+}
+
+[data-bs-theme='oled-night'] .inverter-nav-item {
+    background: #020607 !important;
+    border-color: #12343a !important;
+}
+
+[data-bs-theme='oled-night'] .inverter-nav-item.active {
+    color: #001012 !important;
+    background: #00dff5 !important;
+}
+
+[data-bs-theme='cyberpunk'] .app-navbar {
+    background-color: #160b23 !important;
+    background-image: repeating-linear-gradient(
+        115deg,
+        transparent 0,
+        transparent 38px,
+        rgba(255, 43, 214, 0.11) 38px,
+        rgba(255, 43, 214, 0.11) 41px,
+        transparent 41px,
+        transparent 76px,
+        rgba(22, 232, 255, 0.09) 76px,
+        rgba(22, 232, 255, 0.09) 79px
+    );
+    border-bottom: 2px solid #16e8ff;
+}
+
+[data-bs-theme='cyberpunk'] .app-brand-name,
+[data-bs-theme='cyberpunk'] .page-title {
+    color: #ffffff;
+    text-shadow: 2px 0 #ff2bd6, -1px 0 #16e8ff;
+}
+
+[data-bs-theme='cyberpunk'] body {
+    background-image:
+        linear-gradient(rgba(22, 232, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 43, 214, 0.025) 1px, transparent 1px);
+    background-size: 32px 32px;
+}
+
+[data-bs-theme='cyberpunk'] .channel-header-ac {
+    border-left-color: #16e8ff;
+}
+
+// Cyberpunk intentionally uses a hard, technical visual language. Everything
+// remains static CSS: no animation, images or additional runtime code.
+[data-bs-theme='cyberpunk'] .summary-card,
+[data-bs-theme='cyberpunk'] .power-history-card,
+[data-bs-theme='cyberpunk'] .inverter-panel,
+[data-bs-theme='cyberpunk'] .channel-card,
+[data-bs-theme='cyberpunk'] .inverter-nav-item,
+[data-bs-theme='cyberpunk'] .accordion-item,
+[data-bs-theme='cyberpunk'] .modal-content,
+[data-bs-theme='cyberpunk'] .dropdown-menu {
+    border-radius: 0 !important;
+    clip-path: polygon(
+        0 10px,
+        10px 0,
+        calc(100% - 20px) 0,
+        100% 20px,
+        100% calc(100% - 10px),
+        calc(100% - 10px) 100%,
+        18px 100%,
+        0 calc(100% - 18px)
+    );
+}
+
+[data-bs-theme='cyberpunk'] .card,
+[data-bs-theme='cyberpunk'] .accordion-item,
+[data-bs-theme='cyberpunk'] .modal-content {
+    background-color: rgba(20, 11, 32, 0.96);
+}
+
+[data-bs-theme='cyberpunk'] .card-header,
+[data-bs-theme='cyberpunk'] .accordion-button,
+[data-bs-theme='cyberpunk'] .inverter-header {
+    background-image: repeating-linear-gradient(
+        125deg,
+        transparent 0,
+        transparent 16px,
+        rgba(255, 43, 214, 0.055) 16px,
+        rgba(255, 43, 214, 0.055) 19px,
+        transparent 19px,
+        transparent 34px,
+        rgba(22, 232, 255, 0.045) 34px,
+        rgba(22, 232, 255, 0.045) 36px
+    );
+}
+
+[data-bs-theme='cyberpunk'] .totals-grid > .col:nth-child(4n + 1) .summary-card {
+    border-color: #ff2bd6 !important;
+    border-top-color: #ff2bd6 !important;
+}
+
+[data-bs-theme='cyberpunk'] .totals-grid > .col:nth-child(4n + 2) .summary-card {
+    border-color: #16e8ff !important;
+    border-top-color: #16e8ff !important;
+}
+
+[data-bs-theme='cyberpunk'] .totals-grid > .col:nth-child(4n + 3) .summary-card {
+    border-color: #ffe66d !important;
+    border-top-color: #ffe66d !important;
+}
+
+[data-bs-theme='cyberpunk'] .totals-grid > .col:nth-child(4n) .summary-card {
+    border-color: #39f99d !important;
+    border-top-color: #39f99d !important;
+}
+
+[data-bs-theme='cyberpunk'] .power-history-card {
+    border-color: #16e8ff !important;
+    border-left: 3px solid #ff2bd6 !important;
+}
+
+[data-bs-theme='cyberpunk'] .inverter-panel {
+    border-color: #ff2bd6 !important;
+}
+
+[data-bs-theme='cyberpunk'] .channel-grid > .col:nth-child(3n + 1) .channel-card {
+    border-color: #16e8ff !important;
+}
+
+[data-bs-theme='cyberpunk'] .channel-grid > .col:nth-child(3n + 2) .channel-card {
+    border-color: #ff2bd6 !important;
+}
+
+[data-bs-theme='cyberpunk'] .channel-grid > .col:nth-child(3n) .channel-card {
+    border-color: #ffe66d !important;
+}
+
+[data-bs-theme='cyberpunk'] .btn,
+[data-bs-theme='cyberpunk'] .badge,
+[data-bs-theme='cyberpunk'] .form-control,
+[data-bs-theme='cyberpunk'] .form-select,
+[data-bs-theme='cyberpunk'] .form-check-input {
+    border-radius: 0 !important;
+}
+
+[data-bs-theme='cyberpunk'] .btn,
+[data-bs-theme='cyberpunk'] .badge {
+    clip-path: polygon(0 5px, 5px 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+}
+
+[data-bs-theme='cyberpunk'] .inverter-nav-item.active {
+    color: #0d0715 !important;
+    background: linear-gradient(100deg, #16e8ff 0 72%, #ffe66d 72% 100%) !important;
+    border-color: #16e8ff !important;
+}
+
+[data-bs-theme='cyberpunk'] .table-striped > tbody > tr:nth-of-type(odd) > * {
+    --bs-table-accent-bg: rgba(22, 232, 255, 0.035);
+}
+
+[data-bs-theme='solar-command'] .app-navbar {
+    background: linear-gradient(90deg, #141c1e, #1c292b 58%, #172326) !important;
+    border-bottom: 1px solid rgba(205, 163, 73, 0.65);
+}
+
+[data-bs-theme='solar-command'] .summary-card,
+[data-bs-theme='solar-command'] .power-history-card,
+[data-bs-theme='solar-command'] .inverter-panel {
+    border-color: #334d4e !important;
+    border-top-color: #cda349 !important;
+    background: linear-gradient(145deg, #182225, #121a1c) !important;
+}
+
+[data-bs-theme='solar-command'] .summary-card h2,
+[data-bs-theme='solar-command'] .page-title {
+    color: #f1d690 !important;
+}
+
+[data-bs-theme='industrial'] body {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+    background-size: 100% 28px;
+}
+
+[data-bs-theme='industrial'] .app-navbar {
+    background-color: #24292d !important;
+    border-bottom: 3px solid #f7c600;
+}
+
+[data-bs-theme='industrial'] .card,
+[data-bs-theme='industrial'] .inverter-nav-item,
+[data-bs-theme='industrial'] .accordion-item,
+[data-bs-theme='industrial'] .btn,
+[data-bs-theme='industrial'] .form-control,
+[data-bs-theme='industrial'] .form-select {
+    border-radius: 0 !important;
+}
+
+[data-bs-theme='industrial'] .summary-card,
+[data-bs-theme='industrial'] .power-history-card,
+[data-bs-theme='industrial'] .inverter-panel {
+    border-width: 2px !important;
+    border-top: 4px solid #f7c600 !important;
+}
+
+[data-bs-theme='industrial'] .card-header {
+    background-image: repeating-linear-gradient(135deg, rgba(247, 198, 0, 0.07) 0 8px, transparent 8px 16px);
+}
+
+[data-bs-theme='minimal-light'] .app-navbar {
+    background: rgba(255, 255, 255, 0.98) !important;
+    border-bottom: 1px solid #d1dde1;
+}
+
+[data-bs-theme='minimal-light'] .card,
+[data-bs-theme='minimal-light'] .accordion-item,
+[data-bs-theme='minimal-light'] .inverter-nav-item {
+    background: #ffffff !important;
+    border-color: #d7e1e4 !important;
+    box-shadow: none !important;
+}
+
+[data-bs-theme='minimal-light'] .summary-card {
+    border-top-color: #287fa8 !important;
+}
+
+[data-bs-theme='minimal-light'] .page-title,
+[data-bs-theme='minimal-light'] .app-brand-name {
+    color: #17313e;
+}
+
+[data-bs-theme='nature-energy'] body {
+    background-image: radial-gradient(circle at 92% 8%, rgba(241, 197, 91, 0.075), transparent 28%);
+}
+
+[data-bs-theme='nature-energy'] .app-navbar {
+    background: linear-gradient(90deg, #10241d, #16372d) !important;
+    border-bottom: 1px solid rgba(121, 194, 103, 0.55);
+}
+
+[data-bs-theme='nature-energy'] .card,
+[data-bs-theme='nature-energy'] .accordion-item,
+[data-bs-theme='nature-energy'] .inverter-nav-item {
+    border-radius: 1rem !important;
+    border-color: #2a5144 !important;
+    background: linear-gradient(145deg, #152d25, #0f211b) !important;
+}
+
+[data-bs-theme='nature-energy'] .summary-card {
+    border-top-color: #79c267 !important;
+}
+
+[data-bs-theme='holographic'] body {
+    background-image:
+        radial-gradient(circle at 8% 5%, rgba(82, 229, 242, 0.12), transparent 32%),
+        radial-gradient(circle at 90% 20%, rgba(140, 123, 255, 0.14), transparent 38%);
+    background-attachment: fixed;
+}
+
+[data-bs-theme='holographic'] .app-navbar {
+    background: linear-gradient(100deg, rgba(14, 21, 43, 0.98), rgba(40, 25, 65, 0.96)) !important;
+    border-bottom: 1px solid rgba(82, 229, 242, 0.58);
+}
+
+[data-bs-theme='holographic'] .card,
+[data-bs-theme='holographic'] .accordion-item,
+[data-bs-theme='holographic'] .inverter-nav-item,
+[data-bs-theme='holographic'] .dropdown-menu {
+    border-color: rgba(132, 190, 255, 0.38) !important;
+    background: linear-gradient(135deg, rgba(27, 34, 67, 0.92), rgba(35, 20, 61, 0.9)) !important;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
+}
+
+[data-bs-theme='holographic'] .summary-card:nth-child(odd),
+[data-bs-theme='holographic'] .summary-card {
+    border-top-color: #52e5f2 !important;
+}
+
+[data-bs-theme='holographic'] .page-title {
+    background: linear-gradient(90deg, #ffffff, #79eff8, #b49cff);
+    background-clip: text;
+    color: transparent;
+}
+
+[data-bs-theme='retro-terminal'] body,
+[data-bs-theme='retro-terminal'] button,
+[data-bs-theme='retro-terminal'] input,
+[data-bs-theme='retro-terminal'] select {
+    font-family: 'Cascadia Mono', 'Lucida Console', Consolas, monospace;
+}
+
+[data-bs-theme='retro-terminal'] body {
+    background-image: repeating-linear-gradient(0deg, transparent 0 3px, rgba(101, 255, 143, 0.025) 3px 4px);
+}
+
+[data-bs-theme='retro-terminal'] .app-navbar,
+[data-bs-theme='retro-terminal'] .card,
+[data-bs-theme='retro-terminal'] .accordion-item,
+[data-bs-theme='retro-terminal'] .inverter-nav-item,
+[data-bs-theme='retro-terminal'] .dropdown-menu {
+    background: #020b05 !important;
+    border-color: #286d39 !important;
+    border-radius: 0 !important;
+}
+
+[data-bs-theme='retro-terminal'] .summary-card {
+    border-top-color: #65ff8f !important;
+}
+
+[data-bs-theme='retro-terminal'] .page-title,
+[data-bs-theme='retro-terminal'] .app-brand-name,
+[data-bs-theme='retro-terminal'] h2,
+[data-bs-theme='retro-terminal'] strong {
+    color: #8affaa !important;
+    text-shadow: 0 0 5px rgba(101, 255, 143, 0.25);
+}

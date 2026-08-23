@@ -22,6 +22,10 @@
 #include <LittleFS.h>
 #include <esp_log.h>
 #include <ArduinoJson.h>
+#include <algorithm>
+#include <cmath>
+#include "Configuration.h"
+#include "Datastore.h"
 #include "RuntimeData.h"
 
 
@@ -30,7 +34,7 @@ static const char* TAG = "runtime";
 
 
 constexpr const char* RUNTIME_FILENAME = "/runtime.json";   // filename of the runtime data file
-constexpr uint16_t RUNTIME_VERSION = 1;                     // version prepared for future migration support
+constexpr uint16_t RUNTIME_VERSION = 2;                     // version prepared for future migration support
 
 
 RuntimeClass RuntimeData; // singleton instance
@@ -54,9 +58,10 @@ void RuntimeClass::init(Scheduler& scheduler)
  */
 void RuntimeClass::loop(void)
 {
+    const bool dailyYieldChanged = updateDailyYield();
 
     // check if we need to write the runtime data, either it is 00:05 or on request
-    if (_writeNow.exchange(false) || getWriteTrigger()) {
+    if (dailyYieldChanged || _writeNow.exchange(false) || getWriteTrigger()) {
         write(0); // no freeze time.
     }
 
@@ -110,9 +115,27 @@ bool RuntimeClass::write(uint16_t const freezeMinutes)
     info["save_count"] = nextCount;
     info["save_epoch"] = nextEpoch;
 
-    // serialize additional runtime data here
-    // make sure the additional data remains under its own mutex protection.
-    // todo: serialize additional runtime data
+    uint32_t dailyYieldCurrentDay;
+    uint32_t dailyYieldCurrentWh;
+    uint8_t dailyYieldCount;
+    DailyYieldRecord dailyYieldHistory[DAILY_YIELD_MAX_DAYS];
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        dailyYieldCurrentDay = _dailyYieldCurrentDay;
+        dailyYieldCurrentWh = _dailyYieldCurrentWh;
+        dailyYieldCount = _dailyYieldCount;
+        std::copy_n(_dailyYieldHistory, dailyYieldCount, dailyYieldHistory);
+    }
+
+    JsonObject dailyYield = doc["daily_yield"].to<JsonObject>();
+    dailyYield["current_day"] = dailyYieldCurrentDay;
+    dailyYield["current_wh"] = dailyYieldCurrentWh;
+    JsonArray dailyYieldRecords = dailyYield["records"].to<JsonArray>();
+    for (uint8_t i = 0; i < dailyYieldCount; ++i) {
+        JsonArray record = dailyYieldRecords.add<JsonArray>();
+        record.add(dailyYieldHistory[i].Day);
+        record.add(dailyYieldHistory[i].YieldWh);
+    }
 
     if (!Utils::checkJsonAlloc(doc, __FUNCTION__, __LINE__)) {
         return cleanExit(false, "JSON alloc fault, skipping write");
@@ -170,12 +193,26 @@ bool RuntimeClass::read(ReadMode const mode)
         _writeEpoch = info["save_epoch"] | 0U;
     } // mutex is automatically released when lock goes out of this scope
 
-    // deserialize additional runtime data here, prepare default values and protect the shared data with a mutex
-    // use ReadMode::START_UP for all data that can be initialized during startup
     if (mode == ReadMode::START_UP) {
-        ; // todo: deserialize additional runtime data that can be initialized during startup
-    } else {
-        ; // todo: deserialize additional runtime data that can not be initialized during startup
+        JsonObject dailyYield = doc["daily_yield"];
+        std::lock_guard<std::mutex> lock(_mutex);
+        _dailyYieldCurrentDay = dailyYield["current_day"] | 0U;
+        _dailyYieldCurrentWh = dailyYield["current_wh"] | 0U;
+        _dailyYieldCount = 0;
+        for (JsonArray record : dailyYield["records"].as<JsonArray>()) {
+            if (_dailyYieldCount >= DAILY_YIELD_MAX_DAYS || record.size() < 2) {
+                break;
+            }
+            const uint32_t day = record[0] | 0U;
+            if (day == 0) {
+                continue;
+            }
+            _dailyYieldHistory[_dailyYieldCount].Day = day;
+            _dailyYieldHistory[_dailyYieldCount].YieldWh = record[1] | 0U;
+            _dailyYieldHistory[_dailyYieldCount].IsToday = false;
+            ++_dailyYieldCount;
+        }
+        pruneDailyYieldLocked(Configuration.get().PowerHistory.DailyYieldDays);
     }
 
 
@@ -240,6 +277,88 @@ String RuntimeClass::getWriteCountAndTimeString(void) const
     return ctString;
 }
 
+uint8_t RuntimeClass::getDailyYieldHistory(DailyYieldRecord* records, uint8_t maxRecords, bool includeCurrent) const
+{
+    if (records == nullptr || maxRecords == 0) {
+        return 0;
+    }
+
+    std::lock_guard<std::mutex> lock(_mutex);
+    uint8_t count = 0;
+    if (includeCurrent && _dailyYieldCurrentDay != 0) {
+        records[count++] = { _dailyYieldCurrentDay, _dailyYieldCurrentWh, true };
+    }
+    for (int16_t i = static_cast<int16_t>(_dailyYieldCount) - 1; i >= 0 && count < maxRecords; --i) {
+        records[count++] = _dailyYieldHistory[i];
+        records[count - 1].IsToday = false;
+    }
+    return count;
+}
+
+bool RuntimeClass::updateDailyYield(void)
+{
+    struct tm nowTime;
+    if (!getLocalTime(&nowTime, 1)) {
+        return false;
+    }
+
+    const uint32_t day = static_cast<uint32_t>(nowTime.tm_year + 1900) * 10000U
+        + static_cast<uint32_t>(nowTime.tm_mon + 1) * 100U
+        + static_cast<uint32_t>(nowTime.tm_mday);
+    const uint32_t yieldWh = static_cast<uint32_t>(std::max<long>(
+        0, std::lround(Datastore.getTotalAcYieldDayEnabled())));
+    const auto& config = Configuration.get().PowerHistory;
+    const uint8_t retentionDays = config.DailyYieldDays <= 7 ? 7 : (config.DailyYieldDays <= 14 ? 14 : 30);
+
+    std::lock_guard<std::mutex> lock(_mutex);
+    pruneDailyYieldLocked(retentionDays);
+
+    if (_dailyYieldCurrentDay == 0) {
+        _dailyYieldCurrentDay = day;
+        _dailyYieldCurrentWh = yieldWh;
+        return false;
+    }
+
+    if (_dailyYieldCurrentDay == day) {
+        _dailyYieldCurrentWh = std::max(_dailyYieldCurrentWh, yieldWh);
+        return false;
+    }
+
+    if (config.DailyYieldEnabled) {
+        appendDailyYieldLocked(_dailyYieldCurrentDay, _dailyYieldCurrentWh, retentionDays);
+    }
+    _dailyYieldCurrentDay = day;
+    _dailyYieldCurrentWh = yieldWh;
+    return config.DailyYieldEnabled;
+}
+
+void RuntimeClass::appendDailyYieldLocked(uint32_t day, uint32_t yieldWh, uint8_t retentionDays)
+{
+    if (_dailyYieldCount > 0 && _dailyYieldHistory[_dailyYieldCount - 1].Day == day) {
+        _dailyYieldHistory[_dailyYieldCount - 1].YieldWh = std::max(
+            _dailyYieldHistory[_dailyYieldCount - 1].YieldWh, yieldWh);
+        return;
+    }
+
+    if (_dailyYieldCount >= DAILY_YIELD_MAX_DAYS) {
+        std::move(_dailyYieldHistory + 1, _dailyYieldHistory + _dailyYieldCount, _dailyYieldHistory);
+        --_dailyYieldCount;
+    }
+    _dailyYieldHistory[_dailyYieldCount++] = { day, yieldWh, false };
+    pruneDailyYieldLocked(retentionDays);
+}
+
+void RuntimeClass::pruneDailyYieldLocked(uint8_t retentionDays)
+{
+    const uint8_t keep = retentionDays <= 7 ? 7 : (retentionDays <= 14 ? 14 : DAILY_YIELD_MAX_DAYS);
+    if (_dailyYieldCount <= keep) {
+        return;
+    }
+    const uint8_t removeCount = _dailyYieldCount - keep;
+    std::move(_dailyYieldHistory + removeCount, _dailyYieldHistory + _dailyYieldCount, _dailyYieldHistory);
+    _dailyYieldCount = keep;
+}
+
 
 /*
  * Returns true once a day between 00:05 - 00:10
@@ -255,6 +374,10 @@ bool RuntimeClass::getWriteTrigger(void) {
     if ((nowTime.tm_hour == 0) && (nowTime.tm_min >= 5) && (nowTime.tm_min <= 10)) {
         if (_lastTrigger == false) {
             _lastTrigger = true;
+            const time_t nowEpoch = time(nullptr);
+            if (_writeEpoch != 0 && difftime(nowEpoch, _writeEpoch) < 10 * 60) {
+                return false;
+            }
             return true;
         }
     } else {

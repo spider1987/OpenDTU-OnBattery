@@ -25,11 +25,7 @@
             </section>
 
             <div class="system-card-grid">
-                <FirmwareInfo
-                    class="system-card-wide firmware-card"
-                    :systemStatus="systemDataList"
-                    v-model:allowVersionInfo="allowVersionInfo"
-                />
+                <FirmwareInfo class="system-card-wide firmware-card" :systemStatus="systemDataList" />
                 <HardwareInfo :systemStatus="systemDataList" />
                 <MemoryInfo :systemStatus="systemDataList" />
             </div>
@@ -91,11 +87,9 @@ export default defineComponent({
         return {
             dataLoading: true,
             systemDataList: {} as SystemStatus,
-            allowVersionInfo: false,
         };
     },
     created() {
-        this.allowVersionInfo = (localStorage.getItem('allowVersionInfo') || '0') == '1';
         this.getSystemInfo();
     },
     methods: {
@@ -105,70 +99,10 @@ export default defineComponent({
                 .then((response) => handleResponse(response, this.$emitter, this.$router))
                 .then((data) => {
                     this.systemDataList = data;
-                    this.getUpdateInfo();
                 })
                 .finally(() => {
                     this.dataLoading = false;
                 });
-        },
-        getUpdateInfo() {
-            if (this.systemDataList.git_hash === undefined) {
-                return;
-            }
-
-            // If the left char is a "g" the value is the git hash (remove the "g")
-            this.systemDataList.git_is_hash = this.systemDataList.git_hash?.substring(0, 1) == 'g';
-            this.systemDataList.git_hash = this.systemDataList.git_is_hash
-                ? this.systemDataList.git_hash?.substring(1)
-                : this.systemDataList.git_hash;
-
-            // Handle format "v0.1-5-gabcdefh"
-            if (this.systemDataList.git_hash?.lastIndexOf('-') >= 0) {
-                this.systemDataList.git_hash = this.systemDataList.git_hash.substring(
-                    this.systemDataList.git_hash.lastIndexOf('-') + 2
-                );
-                this.systemDataList.git_is_hash = true;
-            }
-
-            if (!this.allowVersionInfo) {
-                return;
-            }
-
-            const fetchUrl =
-                'https://api.github.com/repos/hoylabs/OpenDTU-OnBattery/compare/' +
-                this.systemDataList.git_hash +
-                '...' +
-                this.systemDataList.git_branch;
-
-            fetch(fetchUrl)
-                .then((response) => {
-                    if (response.ok) {
-                        return response.json();
-                    }
-                    throw new Error(this.$t('systeminfo.VersionError'));
-                })
-                .then((data) => {
-                    if (data.total_commits > 0) {
-                        this.systemDataList.update_text = this.$t('systeminfo.VersionNew');
-                        this.systemDataList.update_status = 'text-bg-warning';
-                        this.systemDataList.update_url = data.html_url;
-                    } else {
-                        this.systemDataList.update_text = this.$t('systeminfo.VersionOk');
-                        this.systemDataList.update_status = 'text-bg-success';
-                    }
-                })
-                .catch((error: Error) => {
-                    this.systemDataList.update_text = error.message;
-                    this.systemDataList.update_status = 'text-bg-secondary';
-                });
-        },
-    },
-    watch: {
-        allowVersionInfo(allow: boolean) {
-            localStorage.setItem('allowVersionInfo', allow ? '1' : '0');
-            if (allow) {
-                this.getUpdateInfo();
-            }
         },
     },
     computed: {

@@ -4,10 +4,19 @@
 #include <TaskSchedulerDeclarations.h>
 #include <mutex>
 #include <atomic>
+#include <cstdint>
 
 
 class RuntimeClass {
 public:
+    static constexpr uint8_t DAILY_YIELD_MAX_DAYS = 30;
+
+    struct DailyYieldRecord {
+        uint32_t Day = 0; // local date as YYYYMMDD
+        uint32_t YieldWh = 0;
+        bool IsToday = false;
+    };
+
     RuntimeClass() = default;
     ~RuntimeClass() = default;
     RuntimeClass(const RuntimeClass&) = delete;
@@ -27,10 +36,14 @@ public:
     bool getReadState(void) const { return _readOK.load(); }
     bool getWriteState(void) const { return _writeOK.load(); }
     String getWriteCountAndTimeString(void) const;
+    uint8_t getDailyYieldHistory(DailyYieldRecord* records, uint8_t maxRecords, bool includeCurrent = true) const;
 
 private:
     void loop(void);
     bool getWriteTrigger(void);
+    bool updateDailyYield(void);
+    void appendDailyYieldLocked(uint32_t day, uint32_t yieldWh, uint8_t retentionDays);
+    void pruneDailyYieldLocked(uint8_t retentionDays);
 
     Task _loopTask;
     std::atomic<bool> _readOK = false;      // true if the last read operation was successful
@@ -42,6 +55,10 @@ private:
     uint16_t _fileVersion = 0;              // shared data: version of the runtime data file, prepared for future migration support
     uint16_t _writeCount = 0;               // shared data: number of write operations
     time_t _writeEpoch = 0;                 // shared data: epoch time when the data was written
+    uint32_t _dailyYieldCurrentDay = 0;
+    uint32_t _dailyYieldCurrentWh = 0;
+    DailyYieldRecord _dailyYieldHistory[DAILY_YIELD_MAX_DAYS] = {};
+    uint8_t _dailyYieldCount = 0;
 };
 
 extern RuntimeClass RuntimeData;

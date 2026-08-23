@@ -36,6 +36,39 @@
                 </div>
             </CardElement>
 
+            <CardElement :text="$t('powerhistoryadmin.DailyYield')" textVariant="text-bg-primary">
+                <div class="form-check form-switch mb-3">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="dailyYieldEnabled"
+                        v-model="config.daily_yield_enabled"
+                    />
+                    <label class="form-check-label" for="dailyYieldEnabled">
+                        {{ $t('powerhistoryadmin.DailyYieldEnabled') }}
+                    </label>
+                </div>
+
+                <div class="row mb-2">
+                    <label for="dailyYieldDays" class="col-sm-4 col-form-label">
+                        {{ $t('powerhistoryadmin.Retention') }}
+                    </label>
+                    <div class="col-sm-8">
+                        <select
+                            id="dailyYieldDays"
+                            class="form-select"
+                            v-model.number="config.daily_yield_days"
+                            :disabled="!config.daily_yield_enabled"
+                        >
+                            <option v-for="days in retentionOptions" :key="days" :value="days">
+                                {{ $t('powerhistoryadmin.Days', { days }) }}
+                            </option>
+                        </select>
+                        <div class="form-text">{{ $t('powerhistoryadmin.DailyYieldHint') }}</div>
+                    </div>
+                </div>
+            </CardElement>
+
             <CardElement :text="$t('powerhistoryadmin.Sources')" textVariant="text-bg-primary">
                 <div class="form-check form-switch mb-3">
                     <input
@@ -116,12 +149,15 @@ export default defineComponent({
             dataLoading: true,
             alert: {} as AlertResponse,
             intervals: [1, 3, 5, 10, 15, 30, 60],
+            retentionOptions: [7, 14, 30],
             config: {
                 enabled: false,
                 power_meter_enabled: false,
                 power_meter_available: false,
                 inverter_total_enabled: false,
                 interval_minutes: 5,
+                daily_yield_enabled: false,
+                daily_yield_days: 30,
                 inverters: [],
             } as PowerHistoryConfig,
         };
@@ -185,6 +221,8 @@ export default defineComponent({
                 power_meter_enabled: this.config.power_meter_available && this.config.power_meter_enabled,
                 inverter_total_enabled: this.config.inverter_total_enabled,
                 interval_minutes: this.config.interval_minutes,
+                daily_yield_enabled: this.config.daily_yield_enabled,
+                daily_yield_days: this.config.daily_yield_days,
                 inverters: this.config.inverters.map(({ serial, enabled }) => ({ serial, enabled })),
             };
             const formData = new FormData();

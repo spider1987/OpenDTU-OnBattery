@@ -17,6 +17,7 @@
             :gridChargerData="liveData.gridcharger"
         />
         <PowerHistoryChart />
+        <DailyYieldHistory v-if="liveData.total?.DailyYieldHistoryEnabled" />
         <div class="row g-3 mt-1 inverter-workspace">
             <div class="col-lg-2" :style="[inverterData.length == 1 ? { display: 'none' } : {}]">
                 <div
@@ -87,8 +88,10 @@
                             :class="{
                                 'inverter-status-disabled': !inverter.poll_enabled,
                                 'inverter-status-error': inverter.poll_enabled && !inverter.reachable,
-                                'inverter-status-idle': inverter.poll_enabled && inverter.reachable && !inverter.producing,
-                                'inverter-status-producing': inverter.poll_enabled && inverter.reachable && inverter.producing,
+                                'inverter-status-idle':
+                                    inverter.poll_enabled && inverter.reachable && !inverter.producing,
+                                'inverter-status-producing':
+                                    inverter.poll_enabled && inverter.reachable && inverter.producing,
                             }"
                         >
                             <div class="inverter-identity flex-grow-1">
@@ -101,9 +104,7 @@
                                     </span>
                                 </div>
                                 <div class="inverter-meta">
-                                    <span>
-                                        {{ $t('home.SerialNumber') }}{{ inverter.serial }}
-                                    </span>
+                                    <span> {{ $t('home.SerialNumber') }}{{ inverter.serial }} </span>
                                     <span>
                                         {{ $t('home.CurrentLimit') }}:
                                         <template v-if="inverter.limit_absolute > -1">
@@ -524,6 +525,7 @@ import HintView from '@/components/HintView.vue';
 import InverterChannelInfo from '@/components/InverterChannelInfo.vue';
 import InverterTotalInfo from '@/components/InverterTotalInfo.vue';
 import PowerHistoryChart from '@/components/PowerHistoryChart.vue';
+import DailyYieldHistory from '@/components/DailyYieldHistory.vue';
 import { LimitType } from '@/types/LimitConfig';
 import ModalDialog from '@/components/ModalDialog.vue';
 import SolarChargerView from '@/components/SolarChargerView.vue';
@@ -565,6 +567,7 @@ export default defineComponent({
         InverterChannelInfo,
         InverterTotalInfo,
         PowerHistoryChart,
+        DailyYieldHistory,
         ModalDialog,
         BIconArrowCounterclockwise,
         BIconBroadcast,

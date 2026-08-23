@@ -45,6 +45,21 @@ def get_build_branch():
     return branch_name
 
 
+def get_firmware_version():
+    version_file = os.path.join(env.subst("$PROJECT_DIR"), "version.txt")
+    try:
+        with open(version_file, "r", encoding="utf-8") as fp:
+            firmware_version = fp.read().strip()
+    except OSError:
+        firmware_version = "0.0.0"
+
+    if not firmware_version:
+        firmware_version = "0.0.0"
+
+    print("Firmware Version: " + firmware_version)
+    return firmware_version
+
+
 def get_firmware_specifier_build_flag():
     build_version = get_build_version()
     build_flag = "-D AUTO_GIT_HASH=\\\"" + build_version + "\\\""
@@ -73,6 +88,8 @@ def do_main():
             lines += 'const char *__COMPILED_DATE_TIME_UTC_STR__ = "%s";\n' % (COMPILED_DATE_TIME_UTC_STR)
 
         if 1:
+            # Add the centrally maintained product version
+            lines += 'const char *__COMPILED_FIRMWARE_VERSION__ = "%s";\n' % (get_firmware_version())
             # Add the description of the current git revision
             lines += 'const char *__COMPILED_GIT_HASH__ = "%s";\n' % (get_build_version())
             # ... and git branch

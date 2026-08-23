@@ -24,8 +24,8 @@ export interface SystemStatus {
     sdkversion: string;
     config_version: string;
     config_version_onbattery: string;
+    firmware_version: string;
     git_hash: string;
-    git_is_hash: boolean;
     git_branch: string;
     pioenv: string;
     resetreason_0: string;
@@ -33,9 +33,6 @@ export interface SystemStatus {
     cfgsavecount: number;
     runtime_savecount: string;
     uptime: number;
-    update_text: string;
-    update_url: string;
-    update_status: string;
     // MemoryInfo
     heap_total: number;
     heap_used: number;

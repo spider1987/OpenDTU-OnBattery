@@ -120,16 +120,14 @@ div.card-tabbed {
     --history-inverter-2: #ff5b9d;
 }
 
-
-
 [data-bs-theme='oled-night'] .app-navbar {
     background-color: #020405 !important;
 }
 
 [data-bs-theme='oled-night'] .summary-card {
     background: #000000 !important;
-    border-color: #12343a !important;
-    border-top-color: #00dff5 !important;
+    border-color: rgba(var(--summary-accent, 0, 223, 245), 0.24) !important;
+    border-top-color: rgb(var(--summary-accent, 0, 223, 245)) !important;
 }
 
 [data-bs-theme='oled-night'] .power-history-card,

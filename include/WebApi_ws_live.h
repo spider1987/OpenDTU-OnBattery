@@ -27,6 +27,7 @@ private:
 
     void onLivedataStatus(AsyncWebServerRequest* request);
     void onPowerHistoryStatus(AsyncWebServerRequest* request);
+    void onDailyYieldHistory(AsyncWebServerRequest* request);
     void onPowerHistoryConfigGet(AsyncWebServerRequest* request);
     void onPowerHistoryConfigPost(AsyncWebServerRequest* request);
     void onWebsocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len);

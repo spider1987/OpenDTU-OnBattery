@@ -461,6 +461,8 @@ bool ConfigurationClass::write()
     powerHistory["power_meter_enabled"] = config.PowerHistory.PowerMeterEnabled;
     powerHistory["inverter_total_enabled"] = config.PowerHistory.InverterTotalEnabled;
     powerHistory["interval_minutes"] = config.PowerHistory.IntervalMinutes;
+    powerHistory["daily_yield_enabled"] = config.PowerHistory.DailyYieldEnabled;
+    powerHistory["daily_yield_days"] = config.PowerHistory.DailyYieldDays;
     JsonArray powerHistoryInverters = powerHistory["inverter_serials"].to<JsonArray>();
     for (uint8_t i = 0; i < INV_MAX_COUNT; ++i) {
         if (config.PowerHistory.InverterSerials[i] != 0) {
@@ -969,6 +971,9 @@ bool ConfigurationClass::read()
     config.PowerHistory.PowerMeterEnabled = powerHistory["power_meter_enabled"] | POWER_HISTORY_POWERMETER_ENABLED;
     config.PowerHistory.InverterTotalEnabled = powerHistory["inverter_total_enabled"] | POWER_HISTORY_INVERTER_TOTAL_ENABLED;
     config.PowerHistory.IntervalMinutes = std::clamp<uint8_t>(powerHistory["interval_minutes"] | POWER_HISTORY_INTERVAL_MINUTES, 1, 60);
+    config.PowerHistory.DailyYieldEnabled = powerHistory["daily_yield_enabled"] | DAILY_YIELD_HISTORY_ENABLED;
+    const uint8_t dailyYieldDays = powerHistory["daily_yield_days"] | DAILY_YIELD_HISTORY_DAYS;
+    config.PowerHistory.DailyYieldDays = dailyYieldDays <= 7 ? 7 : (dailyYieldDays <= 14 ? 14 : 30);
     std::fill(std::begin(config.PowerHistory.InverterSerials), std::end(config.PowerHistory.InverterSerials), 0);
     JsonArray powerHistoryInverters = powerHistory["inverter_serials"];
     uint8_t powerHistoryInverterIndex = 0;

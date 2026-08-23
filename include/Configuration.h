@@ -470,6 +470,8 @@ struct CONFIG_T {
         bool InverterTotalEnabled;
         uint8_t IntervalMinutes;
         uint64_t InverterSerials[INV_MAX_COUNT];
+        bool DailyYieldEnabled;
+        uint8_t DailyYieldDays;
     } PowerHistory;
 
     PowerLimiterConfig PowerLimiter;

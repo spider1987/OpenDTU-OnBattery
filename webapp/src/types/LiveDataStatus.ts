@@ -53,6 +53,7 @@ export interface Total {
     Power: ValueObject;
     YieldDay: ValueObject;
     YieldTotal: ValueObject;
+    DailyYieldHistoryEnabled: boolean;
 }
 
 export interface Hints {

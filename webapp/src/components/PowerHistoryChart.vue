@@ -4,6 +4,14 @@
             <div>
                 <h2 id="power-history-title" class="h5 mb-1">{{ $t('home.PowerHistory') }}</h2>
                 <p class="power-history-subtitle mb-0">{{ $t('home.PowerHistoryHint') }}</p>
+                <p v-if="history.stored_points" class="power-history-samples mb-0">
+                    {{
+                        $t('home.HistorySamples', {
+                            count: history.stored_points,
+                            minutes: Math.max(1, Math.round(history.display_interval / 60)),
+                        })
+                    }}
+                </p>
             </div>
             <div class="btn-group btn-group-sm" role="group" :aria-label="$t('home.HistoryPeriod')">
                 <button
@@ -34,32 +42,89 @@
                 {{ $t('home.NoHistoryData') }}
             </div>
             <template v-else>
-                <div class="power-history-plot">
-                    <svg
-                        viewBox="0 0 1000 300"
-                        role="img"
-                        :aria-label="$t('home.PowerHistory')"
-                        preserveAspectRatio="none"
+                <div ref="chartPlot" class="power-history-plot">
+                    <div class="power-history-canvas">
+                        <svg
+                            ref="chartSvg"
+                            viewBox="0 0 1000 300"
+                            role="img"
+                            :aria-label="$t('home.PowerHistory')"
+                            preserveAspectRatio="none"
+                            @pointerdown="handlePointerDown"
+                            @pointermove="handlePointerMove"
+                            @pointerleave="handlePointerLeave"
+                        >
+                            <g class="history-grid">
+                                <template v-for="tick in yTicks" :key="'y-' + tick.value">
+                                    <line x1="62" x2="985" :y1="tick.y" :y2="tick.y" />
+                                    <text x="54" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
+                                </template>
+                                <line x1="62" x2="985" :y1="zeroY" :y2="zeroY" class="zero-line" />
+                                <template v-for="tick in xTicks" :key="'x-' + tick.timestamp">
+                                    <line :x1="tick.x" :x2="tick.x" y1="15" y2="270" />
+                                    <text :x="tick.x" y="292" text-anchor="middle">{{ tick.label }}</text>
+                                </template>
+                            </g>
+                            <path
+                                v-for="series in chartSeries"
+                                :key="series.key"
+                                class="history-line"
+                                :style="{ stroke: series.color }"
+                                :d="series.path"
+                            />
+                            <g v-if="showSampleMarkers" aria-hidden="true">
+                                <template v-for="series in chartSeries" :key="'points-' + series.key">
+                                    <circle
+                                        v-for="(point, index) in series.points"
+                                        :key="series.key + '-point-' + index"
+                                        class="history-sample-point"
+                                        :style="{ fill: series.color }"
+                                        :cx="point.x"
+                                        :cy="point.y"
+                                        r="1.35"
+                                    />
+                                </template>
+                            </g>
+                            <rect class="history-hit-area" x="62" y="15" width="923" height="255" />
+                            <g v-if="hoveredPoint" class="history-hover" aria-hidden="true">
+                                <line
+                                    class="history-hover-line"
+                                    :x1="hoveredPoint.x"
+                                    :x2="hoveredPoint.x"
+                                    y1="15"
+                                    y2="270"
+                                />
+                                <circle
+                                    v-for="series in hoveredPoint.values.filter((entry) => entry.y !== null)"
+                                    :key="'hover-' + series.key"
+                                    class="history-hover-point"
+                                    :style="{ stroke: series.color }"
+                                    :cx="hoveredPoint.x"
+                                    :cy="series.y ?? 0"
+                                    r="4"
+                                />
+                            </g>
+                        </svg>
+                    </div>
+                    <div
+                        v-if="hoveredPoint"
+                        class="power-history-tooltip"
+                        :class="{ 'align-end': hoverAlignEnd }"
+                        :style="{ left: hoverTooltipX + 'px' }"
                     >
-                        <g class="history-grid">
-                            <template v-for="tick in yTicks" :key="'y-' + tick.value">
-                                <line x1="62" x2="985" :y1="tick.y" :y2="tick.y" />
-                                <text x="54" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
-                            </template>
-                            <line x1="62" x2="985" :y1="zeroY" :y2="zeroY" class="zero-line" />
-                            <template v-for="tick in xTicks" :key="'x-' + tick.timestamp">
-                                <line :x1="tick.x" :x2="tick.x" y1="15" y2="270" />
-                                <text :x="tick.x" y="292" text-anchor="middle">{{ tick.label }}</text>
-                            </template>
-                        </g>
-                        <path
-                            v-for="series in chartSeries"
-                            :key="series.key"
-                            class="history-line"
-                            :style="{ stroke: series.color }"
-                            :d="series.path"
-                        />
-                    </svg>
+                        <strong class="power-history-tooltip-time">{{
+                            formatHoverTime(hoveredPoint.timestamp)
+                        }}</strong>
+                        <div
+                            v-for="series in hoveredPoint.values"
+                            :key="'tooltip-' + series.key"
+                            class="tooltip-series"
+                        >
+                            <span class="history-legend-swatch" :style="{ backgroundColor: series.color }"></span>
+                            <span>{{ series.label }}</span>
+                            <strong>{{ formatPower(series.value) }}</strong>
+                        </div>
+                    </div>
                 </div>
                 <div class="power-history-legend" :aria-label="$t('home.Legend')">
                     <div v-for="series in chartSeries" :key="'legend-' + series.key" class="history-legend-item">
@@ -87,6 +152,8 @@ interface PowerHistory {
     power_meter: boolean;
     inverter_total: boolean;
     sample_interval: number;
+    display_interval: number;
+    stored_points: number;
     hours: number;
     inverters: HistoryInverter[];
     points: Array<Array<number | null>>;
@@ -97,7 +164,22 @@ interface ChartSeries {
     label: string;
     color: string;
     path: string;
+    points: Array<{ x: number; y: number }>;
     lastValue: number | null;
+}
+
+interface HoverSeries {
+    key: string;
+    label: string;
+    color: string;
+    value: number | null;
+    y: number | null;
+}
+
+interface HoveredPoint {
+    timestamp: number;
+    x: number;
+    values: HoverSeries[];
 }
 
 const EMPTY_HISTORY: PowerHistory = {
@@ -105,6 +187,8 @@ const EMPTY_HISTORY: PowerHistory = {
     power_meter: false,
     inverter_total: false,
     sample_interval: 60,
+    display_interval: 60,
+    stored_points: 0,
     hours: 24,
     inverters: [],
     points: [],
@@ -117,6 +201,10 @@ export default defineComponent({
             loading: true,
             history: { ...EMPTY_HISTORY } as PowerHistory,
             refreshTimer: 0,
+            hoveredPointIndex: null as number | null,
+            hoverTooltipX: 0,
+            hoverAlignEnd: false,
+            hoverPinned: false,
         };
     },
     computed: {
@@ -180,10 +268,20 @@ export default defineComponent({
                 return {
                     ...definition,
                     path: this.createPath(values),
+                    points: values.flatMap((value, index) => {
+                        if (typeof value !== 'number') {
+                            return [];
+                        }
+                        const timestamp = Number(this.history.points[index]?.[0] ?? 0);
+                        return [{ x: this.scaleX(timestamp), y: this.scaleY(value) }];
+                    }),
                     lastValue:
                         [...values].reverse().find((value): value is number => typeof value === 'number') ?? null,
                 };
             });
+        },
+        showSampleMarkers(): boolean {
+            return this.history.points.length * Math.max(1, this.chartSeries.length) <= 500;
         },
         yTicks(): Array<{ value: number; y: number; label: string }> {
             return Array.from({ length: 5 }, (_, index) => {
@@ -210,12 +308,39 @@ export default defineComponent({
         zeroY(): number {
             return this.scaleY(0);
         },
+        hoveredPoint(): HoveredPoint | null {
+            if (this.hoveredPointIndex === null) {
+                return null;
+            }
+            const point = this.history.points[this.hoveredPointIndex];
+            if (!point) {
+                return null;
+            }
+            const timestamp = Number(point[0]);
+            return {
+                timestamp,
+                x: this.scaleX(timestamp),
+                values: this.chartSeries.map((series, seriesIndex) => {
+                    const rawValue = point[seriesIndex + 1];
+                    const value = typeof rawValue === 'number' ? rawValue : null;
+                    return {
+                        key: series.key,
+                        label: series.label,
+                        color: series.color,
+                        value,
+                        y: value === null ? null : this.scaleY(value),
+                    };
+                }),
+            };
+        },
     },
     mounted() {
         this.fetchHistory();
+        document.addEventListener('pointerdown', this.handleDocumentPointerDown);
     },
     beforeUnmount() {
         window.clearInterval(this.refreshTimer);
+        document.removeEventListener('pointerdown', this.handleDocumentPointerDown);
     },
     methods: {
         setHours(hours: number) {
@@ -228,6 +353,7 @@ export default defineComponent({
         async fetchHistory(showLoading: boolean = true) {
             if (showLoading) {
                 this.loading = true;
+                this.clearHover();
             }
             try {
                 const response = await fetch('/api/livedata/power-history?hours=' + this.hours, {
@@ -237,7 +363,13 @@ export default defineComponent({
                 if (!response.ok) {
                     throw new Error('HTTP ' + response.status);
                 }
+                const selectedTimestamp = this.hoveredPoint?.timestamp ?? null;
+                const hoverPinned = this.hoverPinned;
                 this.history = (await response.json()) as PowerHistory;
+                if (!showLoading && selectedTimestamp !== null) {
+                    this.hoveredPointIndex = this.findClosestPointIndex(selectedTimestamp);
+                    this.hoverPinned = hoverPinned && this.hoveredPointIndex !== null;
+                }
                 this.scheduleRefresh();
             } catch (error) {
                 console.warn('Could not load power history', error);
@@ -276,6 +408,70 @@ export default defineComponent({
             });
             return path.trim();
         },
+        handlePointerDown(event: PointerEvent) {
+            this.updateHover(event);
+            this.hoverPinned = event.pointerType !== 'mouse';
+        },
+        handlePointerMove(event: PointerEvent) {
+            if (event.pointerType !== 'mouse') {
+                return;
+            }
+            this.hoverPinned = false;
+            this.updateHover(event);
+        },
+        handlePointerLeave(event: PointerEvent) {
+            if (event.pointerType === 'mouse' && !this.hoverPinned) {
+                this.clearHover();
+            }
+        },
+        handleDocumentPointerDown(event: PointerEvent) {
+            if (!this.hoverPinned) {
+                return;
+            }
+            const plot = this.$refs.chartPlot as HTMLDivElement | undefined;
+            if (plot && event.target instanceof Node && plot.contains(event.target)) {
+                return;
+            }
+            this.clearHover();
+        },
+        findClosestPointIndex(timestamp: number): number | null {
+            if (!this.history.points.length) {
+                return null;
+            }
+            let closestIndex = 0;
+            let closestDistance = Number.POSITIVE_INFINITY;
+            this.history.points.forEach((point, index) => {
+                const distance = Math.abs(Number(point[0]) - timestamp);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestIndex = index;
+                }
+            });
+            return closestIndex;
+        },
+        updateHover(event: PointerEvent) {
+            if (!this.hasChartData) {
+                return;
+            }
+            const svg = this.$refs.chartSvg as SVGSVGElement | undefined;
+            const plot = this.$refs.chartPlot as HTMLDivElement | undefined;
+            if (!svg || !plot) {
+                return;
+            }
+            const svgRect = svg.getBoundingClientRect();
+            const plotRect = plot.getBoundingClientRect();
+            const svgX = ((event.clientX - svgRect.left) / svgRect.width) * 1000;
+            const clampedX = Math.min(985, Math.max(62, svgX));
+            const timestamp = this.timeRange.min + ((clampedX - 62) / 923) * (this.timeRange.max - this.timeRange.min);
+
+            this.hoveredPointIndex = this.findClosestPointIndex(timestamp);
+            this.hoverTooltipX = Math.max(8, Math.min(plotRect.width - 8, event.clientX - plotRect.left));
+            this.hoverAlignEnd = this.hoverTooltipX > plotRect.width * 0.62;
+        },
+        clearHover() {
+            this.hoveredPointIndex = null;
+            this.hoverPinned = false;
+        },
         formatAxisPower(value: number): string {
             const absolute = Math.abs(value);
             if (absolute >= 1000) {
@@ -288,6 +484,14 @@ export default defineComponent({
         },
         formatTime(timestamp: number): string {
             return new Intl.DateTimeFormat(String(this.$i18n.locale), {
+                hour: '2-digit',
+                minute: '2-digit',
+            }).format(new Date(timestamp * 1000));
+        },
+        formatHoverTime(timestamp: number): string {
+            return new Intl.DateTimeFormat(String(this.$i18n.locale), {
+                day: '2-digit',
+                month: '2-digit',
                 hour: '2-digit',
                 minute: '2-digit',
             }).format(new Date(timestamp * 1000));
@@ -319,6 +523,17 @@ export default defineComponent({
     font-size: 0.78rem;
 }
 
+.power-history-header h2 {
+    color: var(--bs-primary);
+}
+
+.power-history-samples {
+    margin-top: 0.2rem;
+    color: rgba(var(--bs-warning-rgb), 0.82);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+}
+
 .power-history-body {
     min-height: 8rem;
     padding: 0.8rem 1rem 1rem;
@@ -337,11 +552,16 @@ export default defineComponent({
 }
 
 .power-history-plot {
+    position: relative;
     width: 100%;
     min-height: 15rem;
 }
 
-.power-history-plot svg {
+.power-history-canvas {
+    width: 100%;
+}
+
+.power-history-canvas svg {
     display: block;
     width: 100%;
     height: clamp(15rem, 28vw, 23rem);
@@ -370,6 +590,74 @@ export default defineComponent({
     stroke-linecap: round;
     stroke-linejoin: round;
     vector-effect: non-scaling-stroke;
+}
+
+.history-sample-point {
+    stroke: none;
+    pointer-events: none;
+}
+
+.history-hit-area {
+    cursor: crosshair;
+    fill: transparent;
+    pointer-events: all;
+}
+
+.history-hover-line {
+    stroke: var(--bs-emphasis-color);
+    stroke-dasharray: 4 4;
+    stroke-width: 1.25;
+    vector-effect: non-scaling-stroke;
+}
+
+.history-hover-point {
+    fill: var(--bs-tertiary-bg);
+    stroke-width: 2.5;
+    vector-effect: non-scaling-stroke;
+}
+
+.power-history-tooltip {
+    position: absolute;
+    z-index: 2;
+    top: 0.45rem;
+    min-width: 12rem;
+    max-width: min(20rem, calc(100% - 1rem));
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.55rem;
+    background: var(--bs-body-bg);
+    box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.22);
+    color: var(--bs-body-color);
+    font-size: 0.78rem;
+    pointer-events: none;
+    transform: translateX(0.65rem);
+}
+
+.power-history-tooltip.align-end {
+    transform: translateX(calc(-100% - 0.65rem));
+}
+
+.power-history-tooltip-time {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.tooltip-series {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--bs-secondary-color);
+}
+
+.tooltip-series + .tooltip-series {
+    margin-top: 0.2rem;
+}
+
+.tooltip-series strong {
+    color: var(--bs-body-color);
+    font-variant-numeric: tabular-nums;
 }
 
 .power-history-legend {
@@ -414,12 +702,23 @@ export default defineComponent({
         padding-inline: 0.4rem;
     }
 
-    .power-history-plot {
+    .power-history-canvas {
         overflow-x: auto;
+        overscroll-behavior-inline: contain;
     }
 
-    .power-history-plot svg {
+    .power-history-canvas svg {
         min-width: 44rem;
+    }
+
+    .power-history-tooltip {
+        position: fixed;
+        right: 0.5rem;
+        top: auto;
+        bottom: 0.75rem;
+        left: 0.5rem !important;
+        max-width: calc(100vw - 1rem);
+        transform: none !important;
     }
 }
 </style>

@@ -10,5 +10,7 @@ export interface PowerHistoryConfig {
     power_meter_available: boolean;
     inverter_total_enabled: boolean;
     interval_minutes: number;
+    daily_yield_enabled: boolean;
+    daily_yield_days: number;
     inverters: PowerHistoryInverterConfig[];
 }

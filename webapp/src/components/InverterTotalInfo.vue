@@ -9,7 +9,7 @@
         <template v-if="solarChargerData.enabled">
             <div class="col" v-if="solarChargerData.yieldTotal">
                 <CardElement
-                    class="summary-card"
+                    class="summary-card summary-solar-yield-total"
                     centerContent
                     :text="$t('invertertotalinfo.MpptTotalYieldTotal')"
                 >
@@ -26,7 +26,7 @@
             </div>
             <div class="col" v-if="solarChargerData.yieldDay">
                 <CardElement
-                    class="summary-card"
+                    class="summary-card summary-solar-yield-day"
                     centerContent
                     :text="$t('invertertotalinfo.MpptTotalYieldDay')"
                 >
@@ -42,7 +42,11 @@
                 </CardElement>
             </div>
             <div class="col" v-if="solarChargerData.power">
-                <CardElement class="summary-card" centerContent :text="$t('invertertotalinfo.MpptTotalPower')">
+                <CardElement
+                    class="summary-card summary-solar-power"
+                    centerContent
+                    :text="$t('invertertotalinfo.MpptTotalPower')"
+                >
                     <h2>
                         {{
                             $n(solarChargerData.power.v, 'decimal', {
@@ -57,7 +61,7 @@
         </template>
         <div class="col" v-if="hasInverters">
             <CardElement
-                class="summary-card"
+                class="summary-card summary-yield-total"
                 centerContent
                 :text="$t('invertertotalinfo.InverterTotalYieldTotal')"
             >
@@ -74,7 +78,7 @@
         </div>
         <div class="col" v-if="hasInverters">
             <CardElement
-                class="summary-card"
+                class="summary-card summary-yield-day"
                 centerContent
                 :text="$t('invertertotalinfo.InverterTotalYieldDay')"
             >
@@ -90,7 +94,11 @@
             </CardElement>
         </div>
         <div class="col" v-if="hasInverters">
-            <CardElement class="summary-card" centerContent :text="$t('invertertotalinfo.InverterTotalPower')">
+            <CardElement
+                class="summary-card summary-inverter-power"
+                centerContent
+                :text="$t('invertertotalinfo.InverterTotalPower')"
+            >
                 <h2>
                     {{
                         $n(totalData.Power.v, 'decimal', {
@@ -105,7 +113,7 @@
         <template v-if="totalBattData.enabled">
             <div class="col">
                 <CardElement
-                    class="summary-card"
+                    class="summary-card summary-battery-charge"
                     centerContent
                     flexChildren
                     :text="$t('invertertotalinfo.BatteryCharge')"
@@ -137,7 +145,7 @@
             </div>
             <div class="col" v-if="totalBattData.power || totalBattData.current">
                 <CardElement
-                    class="summary-card"
+                    class="summary-card summary-battery-power"
                     centerContent
                     flexChildren
                     :text="$t('invertertotalinfo.BatteryPower')"
@@ -169,7 +177,11 @@
             </div>
         </template>
         <div class="col" v-if="powerMeterData.enabled">
-            <CardElement class="summary-card" centerContent :text="$t('invertertotalinfo.HomePower')">
+            <CardElement
+                class="summary-card summary-home-power"
+                centerContent
+                :text="$t('invertertotalinfo.HomePower')"
+            >
                 <h2>
                     {{
                         $n(powerMeterData.Power.v, 'decimal', {
@@ -182,7 +194,11 @@
             </CardElement>
         </div>
         <div class="col" v-if="gridChargerData.enabled">
-            <CardElement class="summary-card" centerContent :text="$t('invertertotalinfo.GridChargerPower')">
+            <CardElement
+                class="summary-card summary-grid-charger"
+                centerContent
+                :text="$t('invertertotalinfo.GridChargerPower')"
+            >
                 <h2>
                     {{
                         $n(gridChargerData.Power.v, 'decimal', {
@@ -236,17 +252,18 @@ export default defineComponent({
 }
 
 :deep(.summary-card) {
+    --summary-accent: var(--bs-primary-rgb);
     height: 100%;
     overflow: hidden;
     border-color: var(--bs-border-color);
     border-radius: 0.85rem;
-    border-top: 0.22rem solid rgba(var(--bs-primary-rgb), 0.8);
+    border-top: 0.22rem solid rgba(var(--summary-accent), 0.9);
     background: var(--bs-tertiary-bg);
 }
 
 :deep(.summary-card .card-header) {
     padding: 0.7rem 1rem 0.15rem;
-    color: var(--bs-secondary-color);
+    color: rgba(var(--summary-accent), 0.78);
     background: transparent !important;
     border: 0;
     font-size: 0.8rem;
@@ -270,7 +287,39 @@ export default defineComponent({
 }
 
 :deep(.summary-card h2 small) {
+    color: rgba(var(--summary-accent), 0.72) !important;
     font-size: 0.58em;
     font-weight: 500;
+}
+
+:deep(.summary-solar-yield-total),
+:deep(.summary-yield-total) {
+    --summary-accent: 255, 200, 87;
+}
+
+:deep(.summary-solar-yield-day),
+:deep(.summary-yield-day) {
+    --summary-accent: 53, 232, 151;
+}
+
+:deep(.summary-solar-power),
+:deep(.summary-inverter-power) {
+    --summary-accent: 0, 223, 245;
+}
+
+:deep(.summary-battery-charge) {
+    --summary-accent: 168, 85, 247;
+}
+
+:deep(.summary-battery-power) {
+    --summary-accent: 139, 92, 246;
+}
+
+:deep(.summary-home-power) {
+    --summary-accent: 59, 130, 246;
+}
+
+:deep(.summary-grid-charger) {
+    --summary-accent: 249, 115, 22;
 }
 </style>

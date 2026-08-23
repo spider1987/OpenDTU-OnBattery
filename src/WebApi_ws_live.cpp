@@ -4,6 +4,7 @@
  */
 #include "WebApi_ws_live.h"
 #include "Datastore.h"
+#include "RuntimeData.h"
 #include "Utils.h"
 #include "WebApi.h"
 #include <battery/Controller.h>
@@ -50,6 +51,7 @@ void WebApiWsLiveClass::init(AsyncWebServer& server, Scheduler& scheduler)
     server.on("/api/livedata/power-history/config", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiWsLiveClass::onPowerHistoryConfigGet, this, _1)));
     server.on("/api/livedata/power-history/config", HTTP_POST, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiWsLiveClass::onPowerHistoryConfigPost, this, _1)));
     server.on("/api/livedata/power-history", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiWsLiveClass::onPowerHistoryStatus, this, _1)));
+    server.on("/api/livedata/daily-yield", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiWsLiveClass::onDailyYieldHistory, this, _1)));
 
     server.addHandler(&_ws);
     _ws.onEvent(std::bind(&WebApiWsLiveClass::onWebsocketEvent, this, _1, _2, _3, _4, _5, _6));
@@ -392,6 +394,7 @@ void WebApiWsLiveClass::generateCommonJsonResponse(JsonVariant& root)
     addTotalField(totalObj, "Power", Datastore.getTotalAcPowerEnabled(), "W", Datastore.getTotalAcPowerDigits());
     addTotalField(totalObj, "YieldDay", Datastore.getTotalAcYieldDayEnabled(), "Wh", Datastore.getTotalAcYieldDayDigits());
     addTotalField(totalObj, "YieldTotal", Datastore.getTotalAcYieldTotalEnabled(), "kWh", Datastore.getTotalAcYieldTotalDigits());
+    totalObj["DailyYieldHistoryEnabled"] = Configuration.get().PowerHistory.DailyYieldEnabled;
 
     JsonObject hintObj = root["hints"].to<JsonObject>();
     struct tm timeinfo;
@@ -540,7 +543,16 @@ void WebApiWsLiveClass::onPowerHistoryStatus(AsyncWebServerRequest* request)
         : 1024U;
     const uint16_t responsePointLimit = std::clamp<uint16_t>(
         static_cast<uint16_t>(pointSpace / std::max<size_t>(pointBudget, 1U)), 12U, 240U);
-    const uint16_t samplesInRange = hours * 60U / _powerHistoryIntervalMinutes;
+    const uint16_t oldestIndex = _powerHistoryCapacity == 0
+        ? 0
+        : (_powerHistoryWriteIndex + _powerHistoryCapacity - _powerHistoryCount) % _powerHistoryCapacity;
+    uint16_t samplesInRange = 0;
+    for (uint16_t offset = 0; offset < _powerHistoryCount; ++offset) {
+        const uint16_t pointIndex = (oldestIndex + offset) % _powerHistoryCapacity;
+        if (_powerHistoryTimestamps[pointIndex] >= cutoff) {
+            ++samplesInRange;
+        }
+    }
     const uint8_t bucketSize = std::max<uint8_t>(
         1, (samplesInRange + responsePointLimit - 1) / responsePointLimit);
 
@@ -553,11 +565,13 @@ void WebApiWsLiveClass::onPowerHistoryStatus(AsyncWebServerRequest* request)
         return;
     }
     response->addHeader("Cache-Control", "no-store");
-    response->printf("{\"enabled\":%s,\"power_meter\":%s,\"inverter_total\":%s,\"sample_interval\":%u,\"hours\":%u,\"inverters\":[",
+    response->printf("{\"enabled\":%s,\"power_meter\":%s,\"inverter_total\":%s,\"sample_interval\":%u,\"display_interval\":%u,\"stored_points\":%u,\"hours\":%u,\"inverters\":[",
         _powerHistoryEnabled ? "true" : "false",
         _powerHistoryPowerMeterEnabled ? "true" : "false",
         _powerHistoryInverterTotalEnabled ? "true" : "false",
         _powerHistoryIntervalMinutes * 60U,
+        _powerHistoryIntervalMinutes * bucketSize * 60U,
+        samplesInRange,
         hours);
 
     for (uint8_t i = 0; i < _powerHistoryInverterCount; ++i) {
@@ -624,9 +638,6 @@ void WebApiWsLiveClass::onPowerHistoryStatus(AsyncWebServerRequest* request)
         bucketSamples = 0;
     };
 
-    const uint16_t oldestIndex = _powerHistoryCapacity == 0
-        ? 0
-        : (_powerHistoryWriteIndex + _powerHistoryCapacity - _powerHistoryCount) % _powerHistoryCapacity;
     for (uint16_t offset = 0; offset < _powerHistoryCount; ++offset) {
         const uint16_t pointIndex = (oldestIndex + offset) % _powerHistoryCapacity;
         const uint32_t timestamp = _powerHistoryTimestamps[pointIndex];
@@ -673,6 +684,8 @@ void WebApiWsLiveClass::onPowerHistoryConfigGet(AsyncWebServerRequest* request)
     root["power_meter_available"] = Configuration.get().PowerMeter.Enabled;
     root["inverter_total_enabled"] = historyConfig.InverterTotalEnabled;
     root["interval_minutes"] = historyConfig.IntervalMinutes;
+    root["daily_yield_enabled"] = historyConfig.DailyYieldEnabled;
+    root["daily_yield_days"] = historyConfig.DailyYieldDays;
 
     auto inverterArray = root["inverters"].to<JsonArray>();
     for (uint8_t i = 0; i < Hoymiles.getNumInverters(); ++i) {
@@ -709,6 +722,9 @@ void WebApiWsLiveClass::onPowerHistoryConfigPost(AsyncWebServerRequest* request)
         config.PowerMeterEnabled = root["power_meter_enabled"] | false;
         config.InverterTotalEnabled = root["inverter_total_enabled"] | false;
         config.IntervalMinutes = std::clamp<uint8_t>(root["interval_minutes"] | POWER_HISTORY_INTERVAL_MINUTES, 1, 60);
+        config.DailyYieldEnabled = root["daily_yield_enabled"] | false;
+        const uint8_t dailyYieldDays = root["daily_yield_days"] | DAILY_YIELD_HISTORY_DAYS;
+        config.DailyYieldDays = dailyYieldDays <= 7 ? 7 : (dailyYieldDays <= 14 ? 14 : 30);
         std::fill(std::begin(config.InverterSerials), std::end(config.InverterSerials), 0);
 
         uint8_t inverterIndex = 0;
@@ -729,6 +745,34 @@ void WebApiWsLiveClass::onPowerHistoryConfigPost(AsyncWebServerRequest* request)
     auto& retMsg = response->getRoot();
     WebApi.writeConfig(retMsg);
     configurePowerHistory();
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+}
+
+void WebApiWsLiveClass::onDailyYieldHistory(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentialsReadonly(request)) {
+        return;
+    }
+
+    const auto& config = Configuration.get().PowerHistory;
+    const uint8_t retentionDays = config.DailyYieldDays <= 7 ? 7 : (config.DailyYieldDays <= 14 ? 14 : 30);
+    RuntimeClass::DailyYieldRecord records[RuntimeClass::DAILY_YIELD_MAX_DAYS];
+    const uint8_t recordCount = config.DailyYieldEnabled
+        ? RuntimeData.getDailyYieldHistory(records, retentionDays)
+        : 0;
+
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    auto& root = response->getRoot();
+    root["enabled"] = config.DailyYieldEnabled;
+    root["retention_days"] = retentionDays;
+    JsonArray history = root["records"].to<JsonArray>();
+    for (uint8_t i = 0; i < recordCount; ++i) {
+        JsonObject item = history.add<JsonObject>();
+        item["day"] = records[i].Day;
+        item["yield_wh"] = records[i].YieldWh;
+        item["today"] = records[i].IsToday;
+    }
+    response->addHeader("Cache-Control", "no-store");
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
 

@@ -29,7 +29,6 @@
                         </select>
                     </div>
                 </div>
-
             </CardElement>
 
             <CardElement :text="$t('ntpadmin.LocationConfiguration')" textVariant="text-bg-primary" add-space>

@@ -96,9 +96,9 @@
                                 }}</router-link>
                             </li>
                             <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/powerlimiter"
-                                    >{{ $t('menu.PowerLimiterSettings') }}</router-link
-                                >
+                                <router-link @click="onClick" class="dropdown-item" to="/settings/powerlimiter">{{
+                                    $t('menu.PowerLimiterSettings')
+                                }}</router-link>
                             </li>
                             <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/settings/battery">{{

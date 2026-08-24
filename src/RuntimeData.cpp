@@ -305,8 +305,8 @@ bool RuntimeClass::updateDailyYield(void)
     const uint32_t day = static_cast<uint32_t>(nowTime.tm_year + 1900) * 10000U
         + static_cast<uint32_t>(nowTime.tm_mon + 1) * 100U
         + static_cast<uint32_t>(nowTime.tm_mday);
-    const uint32_t yieldWh = static_cast<uint32_t>(std::max<long>(
-        0, std::lround(Datastore.getTotalAcYieldDayEnabled())));
+    const uint32_t yieldWh = static_cast<uint32_t>(std::max<int64_t>(
+        0, static_cast<int64_t>(std::llround(Datastore.getTotalAcYieldDayEnabled()))));
     const auto& config = Configuration.get().PowerHistory;
     const uint8_t retentionDays = config.DailyYieldDays <= 7 ? 7 : (config.DailyYieldDays <= 14 ? 14 : 30);
 

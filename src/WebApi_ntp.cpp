@@ -33,7 +33,7 @@ static const char EUROPE_TIMEZONES_JSON[] PROGMEM = R"json([
 "Europe/Vatican","Europe/Vienna","Europe/Vilnius","Europe/Volgograd",
 "Europe/Warsaw","Europe/Zagreb","Europe/Zaporozhye","Europe/Zurich"
 ])json";
-}
+} // namespace
 
 void WebApiNtpClass::init(AsyncWebServer& server, Scheduler& scheduler)
 {

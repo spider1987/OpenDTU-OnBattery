@@ -26,6 +26,7 @@
 #include <cmath>
 #include "Configuration.h"
 #include "Datastore.h"
+#include "PowerLimiter.h"
 #include "RuntimeData.h"
 
 
@@ -295,11 +296,37 @@ uint8_t RuntimeClass::getDailyYieldHistory(DailyYieldRecord* records, uint8_t ma
     return count;
 }
 
+bool RuntimeClass::clearDailyYieldHistory()
+{
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        _dailyYieldCurrentDay = 0;
+        _dailyYieldCurrentWh = 0;
+        _dailyYieldCount = 0;
+        std::fill_n(_dailyYieldHistory, DAILY_YIELD_MAX_DAYS, DailyYieldRecord {});
+    }
+
+    // Persist the empty history immediately so a reboot cannot restore it.
+    return write(0);
+}
+
 bool RuntimeClass::updateDailyYield(void)
 {
     struct tm nowTime;
     if (!getLocalTime(&nowTime, 1)) {
         return false;
+    }
+
+    // Battery inverters may stay powered throughout the night. If their
+    // automatic restart is active, its configured hour defines the boundary
+    // of a yield day. Solar inverters without that restart keep using the
+    // calendar boundary and later expose their natural counter reset.
+    if (PowerLimiter.isAutomaticInverterRestartEnabled()
+        && nowTime.tm_hour < Configuration.get().PowerLimiter.RestartHour) {
+        nowTime.tm_mday -= 1;
+        nowTime.tm_hour = 12; // avoid DST gaps while normalizing the date
+        nowTime.tm_isdst = -1;
+        mktime(&nowTime);
     }
 
     const uint32_t day = static_cast<uint32_t>(nowTime.tm_year + 1900) * 10000U
@@ -320,7 +347,12 @@ bool RuntimeClass::updateDailyYield(void)
     }
 
     if (_dailyYieldCurrentDay == day) {
-        _dailyYieldCurrentWh = std::max(_dailyYieldCurrentWh, yieldWh);
+        // The inverter's daily counter can legitimately decrease when it is
+        // reset (for example after midnight or after an inverter restart).
+        // Keeping only the maximum would leave "today" stuck at the value
+        // from before that reset while the live YieldDay value is already
+        // lower. Archived days are finalized separately on a day change.
+        _dailyYieldCurrentWh = yieldWh;
         return false;
     }
 

@@ -22,9 +22,8 @@ CpuTemperatureClass CpuTemperature;
 
 float CpuTemperatureClass::read()
 {
-#if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32S2)
     // Disabling temperature reading for ESP32-S2 models as it might lead to WDT resets.
-    // Same issue with ESP32-S3, where such WDT resets have been observed multiple times.
     // See: https://github.com/espressif/esp-idf/issues/8088
     return NAN;
 #endif

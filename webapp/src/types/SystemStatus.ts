@@ -9,6 +9,19 @@ export interface UartAllocation {
     owner: string;
 }
 
+export interface RestartRecord {
+    boot_number: number;
+    timestamp: number;
+    previous_uptime: number;
+    free_heap: number;
+    minimum_free_heap: number;
+    largest_free_heap_block: number;
+    metrics_valid: boolean;
+    reset_reason: string;
+    reset_description: string;
+    requested_reason: string;
+}
+
 export interface SystemStatus {
     // HardwareInfo
     chipmodel: string;
@@ -30,6 +43,8 @@ export interface SystemStatus {
     pioenv: string;
     resetreason_0: string;
     resetreason_1: string;
+    last_restart?: RestartRecord;
+    restart_history: RestartRecord[];
     cfgsavecount: number;
     runtime_savecount: string;
     uptime: number;

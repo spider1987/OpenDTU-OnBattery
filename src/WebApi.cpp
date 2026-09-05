@@ -60,6 +60,11 @@ void WebApiClass::reload()
     _webApiWsGridChargerLive.reload();
 }
 
+void WebApiClass::reloadPowerHistory()
+{
+    _webApiWsLive.reloadPowerHistory();
+}
+
 bool WebApiClass::checkCredentials(AsyncWebServerRequest* request)
 {
     auto const& config = Configuration.get();

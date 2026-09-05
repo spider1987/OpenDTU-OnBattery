@@ -56,10 +56,15 @@
                         >
                             <g class="history-grid">
                                 <template v-for="tick in yTicks" :key="'y-' + tick.value">
-                                    <line x1="62" x2="985" :y1="tick.y" :y2="tick.y" />
+                                    <line x1="62" x2="930" :y1="tick.y" :y2="tick.y" />
                                     <text x="54" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                                 </template>
-                                <line x1="62" x2="985" :y1="zeroY" :y2="zeroY" class="zero-line" />
+                                <line x1="62" x2="930" :y1="zeroY" :y2="zeroY" class="zero-line" />
+                                <template v-if="history.voltage">
+                                    <template v-for="tick in voltageTicks" :key="'voltage-' + tick.value">
+                                        <text x="992" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
+                                    </template>
+                                </template>
                                 <template v-for="tick in xTicks" :key="'x-' + tick.timestamp">
                                     <line :x1="tick.x" :x2="tick.x" y1="15" y2="270" />
                                     <text :x="tick.x" y="292" text-anchor="middle">{{ tick.label }}</text>
@@ -85,7 +90,7 @@
                                     />
                                 </template>
                             </g>
-                            <rect class="history-hit-area" x="62" y="15" width="923" height="255" />
+                            <rect class="history-hit-area" x="62" y="15" width="868" height="255" />
                             <g v-if="hoveredPoint" class="history-hover" aria-hidden="true">
                                 <line
                                     class="history-hover-line"
@@ -122,7 +127,7 @@
                         >
                             <span class="history-legend-swatch" :style="{ backgroundColor: series.color }"></span>
                             <span>{{ series.label }}</span>
-                            <strong>{{ formatPower(series.value) }}</strong>
+                            <strong>{{ formatSeriesValue(series.value, series.unit) }}</strong>
                         </div>
                     </div>
                 </div>
@@ -130,7 +135,7 @@
                     <div v-for="series in chartSeries" :key="'legend-' + series.key" class="history-legend-item">
                         <span class="history-legend-swatch" :style="{ backgroundColor: series.color }"></span>
                         <span>{{ series.label }}</span>
-                        <strong>{{ formatPower(series.lastValue) }}</strong>
+                        <strong>{{ formatSeriesValue(series.lastValue, series.unit) }}</strong>
                     </div>
                 </div>
             </template>
@@ -147,10 +152,16 @@ interface HistoryInverter {
     name: string;
 }
 
+interface VoltageSource extends HistoryInverter {
+    channel: number;
+}
+
 interface PowerHistory {
     enabled: boolean;
     power_meter: boolean;
     inverter_total: boolean;
+    voltage: boolean;
+    voltage_source: VoltageSource | null;
     sample_interval: number;
     display_interval: number;
     stored_points: number;
@@ -166,6 +177,7 @@ interface ChartSeries {
     path: string;
     points: Array<{ x: number; y: number }>;
     lastValue: number | null;
+    unit: 'power' | 'voltage';
 }
 
 interface HoverSeries {
@@ -174,6 +186,7 @@ interface HoverSeries {
     color: string;
     value: number | null;
     y: number | null;
+    unit: 'power' | 'voltage';
 }
 
 interface HoveredPoint {
@@ -186,6 +199,8 @@ const EMPTY_HISTORY: PowerHistory = {
     enabled: false,
     power_meter: false,
     inverter_total: false,
+    voltage: false,
+    voltage_source: null,
     sample_interval: 60,
     display_interval: 60,
     stored_points: 0,
@@ -221,8 +236,12 @@ export default defineComponent({
             };
         },
         valueRange(): { min: number; max: number } {
+            const seriesCount =
+                (this.history.power_meter ? 1 : 0) +
+                this.history.inverters.length +
+                (this.history.inverter_total ? 1 : 0);
             const values = this.history.points.flatMap((point) =>
-                point.slice(1).filter((value): value is number => typeof value === 'number')
+                point.slice(1, seriesCount + 1).filter((value): value is number => typeof value === 'number')
             );
             if (values.length === 0) {
                 return { min: -1, max: 1 };
@@ -236,6 +255,29 @@ export default defineComponent({
             const padding = (max - min) * 0.08;
             return { min: min - padding, max: max + padding };
         },
+        voltageRange(): { min: number; max: number } {
+            const voltageIndex =
+                1 +
+                (this.history.power_meter ? 1 : 0) +
+                this.history.inverters.length +
+                (this.history.inverter_total ? 1 : 0);
+            const values = this.history.voltage
+                ? this.history.points
+                      .map((point) => point[voltageIndex])
+                      .filter((value): value is number => typeof value === 'number')
+                : [];
+            if (values.length === 0) {
+                return { min: 0, max: 1 };
+            }
+            let min = Math.min(...values);
+            let max = Math.max(...values);
+            if (min === max) {
+                min -= 0.5;
+                max += 0.5;
+            }
+            const padding = (max - min) * 0.08;
+            return { min: min - padding, max: max + padding };
+        },
         chartSeries(): ChartSeries[] {
             const definitions = [
                 ...(this.history.power_meter
@@ -244,6 +286,7 @@ export default defineComponent({
                               key: 'grid',
                               label: this.$t('home.NetworkPower'),
                               color: 'var(--history-grid-power)',
+                              unit: 'power' as const,
                           },
                       ]
                     : []),
@@ -251,6 +294,7 @@ export default defineComponent({
                     key: inverter.serial,
                     label: inverter.name,
                     color: 'var(--history-inverter-' + (index % 10) + ')',
+                    unit: 'power' as const,
                 })),
                 ...(this.history.inverter_total
                     ? [
@@ -258,6 +302,20 @@ export default defineComponent({
                               key: 'inverter-total',
                               label: this.$t('home.InverterTotal'),
                               color: 'var(--history-inverter-' + (this.history.inverters.length % 10) + ')',
+                              unit: 'power' as const,
+                          },
+                      ]
+                    : []),
+                ...(this.history.voltage && this.history.voltage_source
+                    ? [
+                          {
+                              key: 'dc-voltage',
+                              label: this.$t('home.DcVoltage', {
+                                  name: this.history.voltage_source.name,
+                                  channel: this.history.voltage_source.channel,
+                              }),
+                              color: 'var(--history-voltage)',
+                              unit: 'voltage' as const,
                           },
                       ]
                     : []),
@@ -267,13 +325,13 @@ export default defineComponent({
                 const values = this.history.points.map((point) => point[seriesIndex + 1] ?? null);
                 return {
                     ...definition,
-                    path: this.createPath(values),
+                    path: this.createPath(values, definition.unit),
                     points: values.flatMap((value, index) => {
                         if (typeof value !== 'number') {
                             return [];
                         }
                         const timestamp = Number(this.history.points[index]?.[0] ?? 0);
-                        return [{ x: this.scaleX(timestamp), y: this.scaleY(value) }];
+                        return [{ x: this.scaleX(timestamp), y: this.scaleSeriesY(value, definition.unit) }];
                     }),
                     lastValue:
                         [...values].reverse().find((value): value is number => typeof value === 'number') ?? null,
@@ -294,13 +352,24 @@ export default defineComponent({
                 };
             });
         },
+        voltageTicks(): Array<{ value: number; y: number; label: string }> {
+            return Array.from({ length: 5 }, (_, index) => {
+                const ratio = index / 4;
+                const value = this.voltageRange.max - ratio * (this.voltageRange.max - this.voltageRange.min);
+                return {
+                    value,
+                    y: 15 + ratio * 255,
+                    label: this.formatAxisVoltage(value),
+                };
+            });
+        },
         xTicks(): Array<{ timestamp: number; x: number; label: string }> {
             return Array.from({ length: 5 }, (_, index) => {
                 const ratio = index / 4;
                 const timestamp = this.timeRange.min + ratio * (this.timeRange.max - this.timeRange.min);
                 return {
                     timestamp,
-                    x: 62 + ratio * 923,
+                    x: 62 + ratio * 868,
                     label: this.formatTime(timestamp),
                 };
             });
@@ -328,7 +397,8 @@ export default defineComponent({
                         label: series.label,
                         color: series.color,
                         value,
-                        y: value === null ? null : this.scaleY(value),
+                        y: value === null ? null : this.scaleSeriesY(value, series.unit),
+                        unit: series.unit,
                     };
                 }),
             };
@@ -387,13 +457,20 @@ export default defineComponent({
         },
         scaleX(timestamp: number): number {
             const range = this.timeRange.max - this.timeRange.min;
-            return 62 + ((timestamp - this.timeRange.min) / (range || 1)) * 923;
+            return 62 + ((timestamp - this.timeRange.min) / (range || 1)) * 868;
         },
         scaleY(value: number): number {
             const range = this.valueRange.max - this.valueRange.min;
             return 15 + ((this.valueRange.max - value) / (range || 1)) * 255;
         },
-        createPath(values: Array<number | null>): string {
+        scaleVoltageY(value: number): number {
+            const range = this.voltageRange.max - this.voltageRange.min;
+            return 15 + ((this.voltageRange.max - value) / (range || 1)) * 255;
+        },
+        scaleSeriesY(value: number, unit: 'power' | 'voltage'): number {
+            return unit === 'voltage' ? this.scaleVoltageY(value) : this.scaleY(value);
+        },
+        createPath(values: Array<number | null>, unit: 'power' | 'voltage'): string {
             let path = '';
             let segmentOpen = false;
             values.forEach((value, index) => {
@@ -403,7 +480,12 @@ export default defineComponent({
                 }
                 const timestamp = Number(this.history.points[index]?.[0] ?? 0);
                 const command = segmentOpen ? 'L' : 'M';
-                path += command + this.scaleX(timestamp).toFixed(1) + ',' + this.scaleY(value).toFixed(1) + ' ';
+                path +=
+                    command +
+                    this.scaleX(timestamp).toFixed(1) +
+                    ',' +
+                    this.scaleSeriesY(value, unit).toFixed(1) +
+                    ' ';
                 segmentOpen = true;
             });
             return path.trim();
@@ -461,8 +543,9 @@ export default defineComponent({
             const svgRect = svg.getBoundingClientRect();
             const plotRect = plot.getBoundingClientRect();
             const svgX = ((event.clientX - svgRect.left) / svgRect.width) * 1000;
-            const clampedX = Math.min(985, Math.max(62, svgX));
-            const timestamp = this.timeRange.min + ((clampedX - 62) / 923) * (this.timeRange.max - this.timeRange.min);
+            const clampedX = Math.min(930, Math.max(62, svgX));
+            const timestamp =
+                this.timeRange.min + ((clampedX - 62) / 868) * (this.timeRange.max - this.timeRange.min);
 
             this.hoveredPointIndex = this.findClosestPointIndex(timestamp);
             this.hoverTooltipX = Math.max(8, Math.min(plotRect.width - 8, event.clientX - plotRect.left));
@@ -479,8 +562,16 @@ export default defineComponent({
             }
             return this.$n(value, 'decimalNoDigits') + ' W';
         },
-        formatPower(value: number | null): string {
-            return value === null ? '–' : this.$n(value, 'decimalNoDigits') + ' W';
+        formatAxisVoltage(value: number): string {
+            return this.$n(value, 'decimalOneDigit') + ' V';
+        },
+        formatSeriesValue(value: number | null, unit: 'power' | 'voltage'): string {
+            if (value === null) {
+                return '–';
+            }
+            return unit === 'voltage'
+                ? this.$n(value, 'decimalTwoDigits') + ' V'
+                : this.$n(value, 'decimalNoDigits') + ' W';
         },
         formatTime(timestamp: number): string {
             return new Intl.DateTimeFormat(String(this.$i18n.locale), {

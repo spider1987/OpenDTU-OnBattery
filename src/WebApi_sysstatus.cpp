@@ -6,6 +6,8 @@
 #include "Configuration.h"
 #include "NetworkSettings.h"
 #include "PinMapping.h"
+#include "RestartHelper.h"
+#include "RuntimeData.h"
 #include "SerialPortManager.h"
 #include "WebApi.h"
 #include "__compiled_constants.h"
@@ -14,13 +16,46 @@
 #include <Hoymiles.h>
 #include <LittleFS.h>
 #include <ResetReason.h>
-#include "RuntimeData.h"
+
+namespace {
+
+void addRestartRecord(JsonObject target, const RestartRecord& record)
+{
+    target["boot_number"] = record.BootNumber;
+    target["timestamp"] = record.Timestamp;
+    target["previous_uptime"] = record.PreviousUptime;
+    target["free_heap"] = record.FreeHeap;
+    target["minimum_free_heap"] = record.MinimumFreeHeap;
+    target["largest_free_heap_block"] = record.LargestFreeHeapBlock;
+    target["metrics_valid"] = record.MetricsValid;
+    target["reset_reason"] = RestartHelperClass::getEspResetReasonName(record.EspResetReason);
+    target["reset_description"] = RestartHelperClass::getEspResetReasonDescription(record.EspResetReason);
+    target["requested_reason"] = RestartHelperClass::getRestartReasonName(record.RequestedReason);
+}
+
+} // namespace
 
 void WebApiSysstatusClass::init(AsyncWebServer& server, Scheduler& scheduler)
 {
     using std::placeholders::_1;
 
     server.on("/api/system/status", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiSysstatusClass::onSystemStatus, this, _1)));
+    server.on("/api/system/restart_history/clear", HTTP_POST,
+        static_cast<ArRequestHandlerFunction>(std::bind(&WebApiSysstatusClass::onRestartHistoryClear, this, _1)));
+}
+
+void WebApiSysstatusClass::onRestartHistoryClear(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) {
+        return;
+    }
+
+    AsyncJsonResponse* response = new AsyncJsonResponse();
+    auto& root = response->getRoot();
+    const bool success = RestartHelper.clearHistory();
+    root["type"] = success ? "success" : "danger";
+    root["message"] = success ? "Restart history cleared" : "Failed to clear restart history";
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
 
 void WebApiSysstatusClass::onSystemStatus(AsyncWebServerRequest* request)
@@ -82,6 +117,17 @@ void WebApiSysstatusClass::onSystemStatus(AsyncWebServerRequest* request)
 
     reason = ResetReason::get_reset_reason_verbose(1);
     root["resetreason_1"] = reason;
+
+    RestartRecord restartHistory[RestartHelperClass::RESTART_HISTORY_SIZE];
+    const uint8_t restartHistoryCount = RestartHelper.getRestartHistory(
+        restartHistory, RestartHelperClass::RESTART_HISTORY_SIZE);
+    if (restartHistoryCount > 0) {
+        addRestartRecord(root["last_restart"].to<JsonObject>(), restartHistory[0]);
+    }
+    JsonArray restartHistoryJson = root["restart_history"].to<JsonArray>();
+    for (uint8_t i = 0; i < restartHistoryCount; ++i) {
+        addRestartRecord(restartHistoryJson.add<JsonObject>(), restartHistory[i]);
+    }
 
     root["cfgsavecount"] = Configuration.get().Cfg.SaveCount;
     root["runtime_savecount"] = RuntimeData.getWriteCountAndTimeString();

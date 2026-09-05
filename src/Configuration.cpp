@@ -7,6 +7,7 @@
 #include "Utils.h"
 #include "defaults.h"
 #include <LittleFS.h>
+#include <cmath>
 #include <esp_log.h>
 #include <nvs_flash.h>
 
@@ -460,6 +461,7 @@ bool ConfigurationClass::write()
     powerHistory["enabled"] = config.PowerHistory.Enabled;
     powerHistory["power_meter_enabled"] = config.PowerHistory.PowerMeterEnabled;
     powerHistory["inverter_total_enabled"] = config.PowerHistory.InverterTotalEnabled;
+    powerHistory["voltage_enabled"] = config.PowerHistory.VoltageEnabled;
     powerHistory["interval_minutes"] = config.PowerHistory.IntervalMinutes;
     powerHistory["daily_yield_enabled"] = config.PowerHistory.DailyYieldEnabled;
     powerHistory["daily_yield_days"] = config.PowerHistory.DailyYieldDays;
@@ -777,6 +779,7 @@ bool ConfigurationClass::read()
     // perform a migration, whereas in the latter there is no need for a
     // migration as the config is default-initialized to the current version.
     uint32_t version_onbattery = 0;
+    bool ntpDefaultsRestored = false;
 
     // Deserialize the JSON document
     const DeserializationError error = deserializeJson(doc, f);
@@ -849,11 +852,38 @@ bool ConfigurationClass::read()
     config.Syslog.Port = syslog["port"] | SYSLOG_PORT;
 
     JsonObject ntp = doc["ntp"];
-    strlcpy(config.Ntp.Server, ntp["server"] | NTP_SERVER, sizeof(config.Ntp.Server));
-    strlcpy(config.Ntp.TimezoneDescr, ntp["timezone_descr"] | NTP_TIMEZONEDESCR, sizeof(config.Ntp.TimezoneDescr));
-    config.Ntp.Latitude = ntp["latitude"] | NTP_LATITUDE;
-    config.Ntp.Longitude = ntp["longitude"] | NTP_LONGITUDE;
+
+    const char* ntpServer = ntp["server"] | "";
+    if (ntpServer[0] == '\0') {
+        ntpServer = NTP_SERVER;
+        ntpDefaultsRestored = true;
+    }
+    strlcpy(config.Ntp.Server, ntpServer, sizeof(config.Ntp.Server));
+
+    const char* timezoneDescr = ntp["timezone_descr"] | "";
+    if (timezoneDescr[0] == '\0') {
+        timezoneDescr = NTP_TIMEZONEDESCR;
+        ntpDefaultsRestored = true;
+    }
+    strlcpy(config.Ntp.TimezoneDescr, timezoneDescr, sizeof(config.Ntp.TimezoneDescr));
+
+    config.Ntp.Latitude = ntp["latitude"] | static_cast<double>(NTP_LATITUDE);
+    if (!std::isfinite(config.Ntp.Latitude) || config.Ntp.Latitude < -90.0 || config.Ntp.Latitude > 90.0) {
+        config.Ntp.Latitude = NTP_LATITUDE;
+        ntpDefaultsRestored = true;
+    }
+
+    config.Ntp.Longitude = ntp["longitude"] | static_cast<double>(NTP_LONGITUDE);
+    if (!std::isfinite(config.Ntp.Longitude) || config.Ntp.Longitude < -180.0 || config.Ntp.Longitude > 180.0) {
+        config.Ntp.Longitude = NTP_LONGITUDE;
+        ntpDefaultsRestored = true;
+    }
+
     config.Ntp.SunsetType = ntp["sunsettype"] | NTP_SUNSETTYPE;
+    if (config.Ntp.SunsetType > 3) {
+        config.Ntp.SunsetType = NTP_SUNSETTYPE;
+        ntpDefaultsRestored = true;
+    }
 
     JsonObject mqtt = doc["mqtt"];
     config.Mqtt.Enabled = mqtt["enabled"] | MQTT_ENABLED;
@@ -970,6 +1000,7 @@ bool ConfigurationClass::read()
     config.PowerHistory.Enabled = powerHistory["enabled"] | POWER_HISTORY_ENABLED;
     config.PowerHistory.PowerMeterEnabled = powerHistory["power_meter_enabled"] | POWER_HISTORY_POWERMETER_ENABLED;
     config.PowerHistory.InverterTotalEnabled = powerHistory["inverter_total_enabled"] | POWER_HISTORY_INVERTER_TOTAL_ENABLED;
+    config.PowerHistory.VoltageEnabled = powerHistory["voltage_enabled"] | POWER_HISTORY_VOLTAGE_ENABLED;
     config.PowerHistory.IntervalMinutes = std::clamp<uint8_t>(powerHistory["interval_minutes"] | POWER_HISTORY_INTERVAL_MINUTES, 1, 60);
     config.PowerHistory.DailyYieldEnabled = powerHistory["daily_yield_enabled"] | DAILY_YIELD_HISTORY_ENABLED;
     const uint8_t dailyYieldDays = powerHistory["daily_yield_days"] | DAILY_YIELD_HISTORY_DAYS;
@@ -1013,6 +1044,12 @@ bool ConfigurationClass::read()
             static_cast<uint32_t>(dtuId & 0xFFFFFFFF));
     } else {
         ESP_LOGI(TAG, "DTU serial check: Using existing serial");
+        if (ntpDefaultsRestored) {
+            const bool success = write();
+            ESP_LOG_LEVEL_LOCAL((success ? ESP_LOG_INFO : ESP_LOG_WARN), TAG,
+                "Restored invalid NTP settings to defaults and saved them %s",
+                success ? "successfully" : "failed");
+        }
     }
 
     return true;

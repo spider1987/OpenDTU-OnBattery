@@ -1,7 +1,23 @@
 import os
 import hashlib
 import pickle
+import shutil
 import subprocess
+
+
+def find_yarn():
+    for executable in ("yarn", "yarnpkg"):
+        if shutil.which(executable):
+            return executable
+
+    if shutil.which("corepack"):
+        return "corepack yarn"
+
+    raise Exception(
+        "it seems neither 'yarn', 'yarnpkg', nor 'corepack' is available "
+        "on your system"
+    )
+
 
 def check_files(directories, filepaths, hash_file):
     old_file_hashes = {}
@@ -40,15 +56,8 @@ def check_files(directories, filepaths, hash_file):
     # we need to change the working directory to the webapp directory such
     # that corepack installs and uses the expected version of yarn. otherwise,
     # corepack installs a copy of yarn into the repository root directory.
-    yarn = "yarn"
-    try:
-        subprocess.check_output(yarn + " --version", cwd="webapp", shell=True)
-    except FileNotFoundError:
-        yarn = "yarnpkg"
-        try:
-            subprocess.check_output(yarn + " --version", cwd="webapp", shell=True)
-        except FileNotFoundError:
-            raise Exception("it seems neither 'yarn' nor 'yarnpkg' is available on your system")
+    yarn = find_yarn()
+    subprocess.check_output(yarn + " --version", cwd="webapp", shell=True)
 
     # if these commands fail, an exception will prevent us from
     # persisting the current hashes => commands will be executed again

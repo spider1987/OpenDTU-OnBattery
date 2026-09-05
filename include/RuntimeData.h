@@ -37,6 +37,7 @@ public:
     bool getWriteState(void) const { return _writeOK.load(); }
     String getWriteCountAndTimeString(void) const;
     uint8_t getDailyYieldHistory(DailyYieldRecord* records, uint8_t maxRecords, bool includeCurrent = true) const;
+    bool clearDailyYieldHistory();
 
 private:
     void loop(void);

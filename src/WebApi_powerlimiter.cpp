@@ -110,6 +110,7 @@ void WebApiPowerLimiterClass::onAdminPost(AsyncWebServerRequest* request)
     request->send(response);
 
     PowerLimiter.triggerReloadingConfig();
+    WebApi.reloadPowerHistory();
 
     // potentially make thresholds auto-discoverable
     MqttHandlePowerLimiterHass.forceUpdate();

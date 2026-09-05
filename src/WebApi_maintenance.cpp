@@ -47,7 +47,7 @@ void WebApiMaintenanceClass::onRebootPost(AsyncWebServerRequest* request)
 
         // write the runtime data to LittleFS, but do not write if last write operation was less than 10 min ago
         RuntimeData.write(10);
-        RestartHelper.triggerRestart();
+        RestartHelper.triggerRestart(RestartReason::UserRequest);
     } else {
         retMsg["message"] = "Reboot cancled!";
         retMsg["code"] = WebApiError::MaintenanceRebootCancled;

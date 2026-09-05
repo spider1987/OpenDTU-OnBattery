@@ -10,4 +10,5 @@ public:
 
 private:
     void onSystemStatus(AsyncWebServerRequest* request);
+    void onRestartHistoryClear(AsyncWebServerRequest* request);
 };

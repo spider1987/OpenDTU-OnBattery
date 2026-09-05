@@ -468,6 +468,7 @@ struct CONFIG_T {
         bool Enabled;
         bool PowerMeterEnabled;
         bool InverterTotalEnabled;
+        bool VoltageEnabled;
         uint8_t IntervalMinutes;
         uint64_t InverterSerials[INV_MAX_COUNT];
         bool DailyYieldEnabled;

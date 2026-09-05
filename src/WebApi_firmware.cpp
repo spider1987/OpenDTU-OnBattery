@@ -51,7 +51,7 @@ void WebApiFirmwareClass::onFirmwareUpdateFinish(AsyncWebServerRequest* request)
 
     // write the runtime data to LittleFS, but do not write if last write operation was less than 10 min ago
     RuntimeData.write(10);
-    RestartHelper.triggerRestart();
+    RestartHelper.triggerRestart(RestartReason::OtaUpdate);
 }
 
 void WebApiFirmwareClass::onFirmwareUpdateUpload(AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final)

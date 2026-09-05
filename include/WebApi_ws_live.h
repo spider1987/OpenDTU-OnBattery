@@ -13,6 +13,7 @@ public:
     WebApiWsLiveClass();
     void init(AsyncWebServer& server, Scheduler& scheduler);
     void reload();
+    void reloadPowerHistory() { configurePowerHistory(); }
 
 private:
     static void generateInverterCommonJsonResponse(JsonObject& root, std::shared_ptr<InverterAbstract> inv);
@@ -28,6 +29,7 @@ private:
     void onLivedataStatus(AsyncWebServerRequest* request);
     void onPowerHistoryStatus(AsyncWebServerRequest* request);
     void onDailyYieldHistory(AsyncWebServerRequest* request);
+    void onDailyYieldHistoryClear(AsyncWebServerRequest* request);
     void onPowerHistoryConfigGet(AsyncWebServerRequest* request);
     void onPowerHistoryConfigPost(AsyncWebServerRequest* request);
     void onWebsocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len);
@@ -46,12 +48,16 @@ private:
     std::mutex _mutex;
 
     static constexpr int16_t POWER_HISTORY_INVALID_INVERTER = INT16_MIN;
+    static constexpr int16_t POWER_HISTORY_INVALID_VOLTAGE = INT16_MIN;
     static constexpr int32_t POWER_HISTORY_INVALID_GRID = INT32_MIN;
 
     std::unique_ptr<uint32_t[]> _powerHistoryTimestamps;
     std::unique_ptr<int32_t[]> _powerHistoryGridPower;
     std::unique_ptr<int16_t[]> _powerHistoryInverterPower;
+    std::unique_ptr<int16_t[]> _powerHistoryVoltage;
     uint64_t _powerHistorySerials[INV_MAX_COUNT] = {};
+    uint64_t _powerHistoryVoltageSerial = 0;
+    uint8_t _powerHistoryVoltageChannel = 0;
     uint16_t _powerHistoryWriteIndex = 0;
     uint16_t _powerHistoryCount = 0;
     uint16_t _powerHistoryCapacity = 0;
@@ -61,6 +67,7 @@ private:
     bool _powerHistoryEnabled = false;
     bool _powerHistoryPowerMeterEnabled = false;
     bool _powerHistoryInverterTotalEnabled = false;
+    bool _powerHistoryVoltageEnabled = false;
     std::mutex _powerHistoryMutex;
 
     void configurePowerHistory();

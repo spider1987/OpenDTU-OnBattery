@@ -144,6 +144,9 @@ void setup()
     InverterSettings.init(scheduler);
 
     Datastore.init(scheduler);
+
+    // Keep reset diagnostics out of the early cold-start path. The ESP-IDF
+    // reset reason and RTC data remain available at this point.
     RestartHelper.init(scheduler);
 
     // OpenDTU-OnBattery-specific initializations go between here...

@@ -10,7 +10,7 @@
                 <article class="system-summary-card">
                     <span class="system-summary-label">{{ $t('firmwareinfo.Uptime') }}</span>
                     <strong>{{ $t('firmwareinfo.UptimeValue', timeInHours(systemDataList.uptime)) }}</strong>
-                    <small>{{ systemDataList.resetreason_0 }}</small>
+                    <small>{{ lastResetText }}</small>
                 </article>
                 <article class="system-summary-card">
                     <span class="system-summary-label">{{ $t('systeminfo.FreeHeap') }}</span>
@@ -25,6 +25,7 @@
             </section>
 
             <div class="system-card-grid">
+                <RestartInfo class="system-card-wide" :systemStatus="systemDataList" @cleared="getSystemInfo" />
                 <FirmwareInfo class="system-card-wide firmware-card" :systemStatus="systemDataList" />
                 <HardwareInfo :systemStatus="systemDataList" />
                 <MemoryInfo :systemStatus="systemDataList" />
@@ -34,6 +35,7 @@
                 <summary>{{ $t('systeminfo.TechnicalDetails') }}</summary>
                 <div class="system-card-grid system-detail-grid">
                     <MemoryDetails
+                        :class="{ 'system-card-wide': systemDataList.psram_total <= 0 }"
                         :title="$t('memorydetails.HeapDetails')"
                         :total="systemDataList.heap_total"
                         :used="systemDataList.heap_used"
@@ -64,6 +66,7 @@ import FirmwareInfo from '@/components/FirmwareInfo.vue';
 import HardwareInfo from '@/components/HardwareInfo.vue';
 import MemoryInfo from '@/components/MemoryInfo.vue';
 import MemoryDetails from '@/components/MemoryDetails.vue';
+import RestartInfo from '@/components/RestartInfo.vue';
 import TaskDetails from '@/components/TaskDetails.vue';
 import RadioInfo from '@/components/RadioInfo.vue';
 import UartAllocations from '@/components/UartAllocations.vue';
@@ -79,6 +82,7 @@ export default defineComponent({
         HardwareInfo,
         MemoryInfo,
         MemoryDetails,
+        RestartInfo,
         TaskDetails,
         RadioInfo,
         UartAllocations,
@@ -113,6 +117,12 @@ export default defineComponent({
             return this.systemDataList.heap_total > 0
                 ? this.systemDataList.heap_used / this.systemDataList.heap_total
                 : 0;
+        },
+        lastResetText(): string {
+            const reason = this.systemDataList.last_restart?.reset_reason;
+            return reason
+                ? this.$t(`restartinfo.ResetReasons.${reason}`).toString()
+                : this.systemDataList.resetreason_0;
         },
         timeInHours() {
             return (value: number) => {

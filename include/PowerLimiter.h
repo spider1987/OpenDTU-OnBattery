@@ -53,6 +53,12 @@ public:
     Mode getMode() const { return _mode; }
     bool usesBatteryPoweredInverter() const;
     bool usesSmartBufferPoweredInverter() const;
+    bool isAutomaticInverterRestartEnabled() const
+    {
+        return Configuration.get().PowerLimiter.Enabled
+            && Mode::Disabled != _mode
+            && _nextInverterRestart.first;
+    }
 
     // used to interlock Huawei R48xx grid charger against battery-powered inverters
     bool isGovernedBatteryPoweredInverterProducing() const;

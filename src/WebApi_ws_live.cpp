@@ -19,6 +19,7 @@
 #include <cmath>
 #include <ctime>
 #include <new>
+#include <vector>
 
 #undef TAG
 static const char* TAG = "webapi";
@@ -359,23 +360,103 @@ void WebApiWsLiveClass::generateOnBatteryJsonResponse(JsonVariant& root, bool al
     }
 }
 
-void WebApiWsLiveClass::sendOnBatteryStats()
+bool WebApiWsLiveClass::hasWebsocketBackpressure()
 {
-    JsonDocument root;
-    JsonVariant var = root;
+    bool hasConnectedClient = false;
+    size_t largestQueue = 0;
+    for (auto& client : _ws.getClients()) {
+        if (client.status() != WS_CONNECTED) {
+            continue;
+        }
+        hasConnectedClient = true;
+        largestQueue = std::max(largestQueue, client.queueLen());
+        if (client.queueLen() < LIVE_WS_MAX_PENDING_MESSAGES) {
+            return false;
+        }
+    }
 
-    bool all = (millis() - _lastPublishOnBatteryFull) > 10 * 1000;
-    if (all) { _lastPublishOnBatteryFull = millis(); }
-    generateOnBatteryJsonResponse(var, all);
+    if (hasConnectedClient) {
+        const uint32_t now = millis();
+        if (now - _lastWebsocketBackpressureLog >= LIVE_WS_LOG_INTERVAL_MS) {
+            _lastWebsocketBackpressureLog = now;
+            ESP_LOGW(TAG, "Skipping live data: all websocket clients are backlogged (up to %u messages)",
+                static_cast<unsigned>(largestQueue));
+        }
+    }
+    return hasConnectedClient;
+}
 
-    if (root.isNull()) { return; }
+bool WebApiWsLiveClass::sendLiveData(const String& buffer)
+{
+    if (hasWebsocketBackpressure()) {
+        return false;
+    }
 
-    if (Utils::checkJsonAlloc(root, __FUNCTION__, __LINE__)) {
+    try {
+        auto sharedBuffer = std::make_shared<std::vector<uint8_t>>(buffer.length());
+        std::copy_n(reinterpret_cast<const uint8_t*>(buffer.c_str()), buffer.length(), sharedBuffer->data());
+
+        bool enqueued = false;
+        bool skippedBackloggedClient = false;
+        size_t largestQueue = 0;
+        for (auto& client : _ws.getClients()) {
+            if (client.status() != WS_CONNECTED) {
+                continue;
+            }
+            if (client.queueLen() >= LIVE_WS_MAX_PENDING_MESSAGES) {
+                skippedBackloggedClient = true;
+                largestQueue = std::max(largestQueue, client.queueLen());
+                continue;
+            }
+            enqueued = client.text(sharedBuffer) || enqueued;
+        }
+
+        if (skippedBackloggedClient) {
+            const uint32_t now = millis();
+            if (now - _lastWebsocketBackpressureLog >= LIVE_WS_LOG_INTERVAL_MS) {
+                _lastWebsocketBackpressureLog = now;
+                ESP_LOGW(TAG, "Skipped a backlogged websocket client with %u pending messages",
+                    static_cast<unsigned>(largestQueue));
+            }
+        }
+        return enqueued;
+    } catch (const std::bad_alloc& badAlloc) {
+        ESP_LOGE(TAG, "Skipping live data: websocket allocation failed: %s", badAlloc.what());
+    } catch (const std::exception& exc) {
+        ESP_LOGE(TAG, "Skipping live data: websocket send failed: %s", exc.what());
+    }
+    return false;
+}
+
+bool WebApiWsLiveClass::sendOnBatteryStats()
+{
+    if (hasWebsocketBackpressure()) {
+        return false;
+    }
+
+    try {
+        JsonDocument root;
+        JsonVariant var = root;
+
+        bool all = (millis() - _lastPublishOnBatteryFull) > 10 * 1000;
+        if (all) { _lastPublishOnBatteryFull = millis(); }
+        generateOnBatteryJsonResponse(var, all);
+
+        if (root.isNull()) { return true; }
+
+        if (!Utils::checkJsonAlloc(root, __FUNCTION__, __LINE__)) {
+            return false;
+        }
+
         String buffer;
         serializeJson(root, buffer);
-
-        _ws.textAll(buffer);;
+        return sendLiveData(buffer);
+    } catch (const std::bad_alloc& badAlloc) {
+        ESP_LOGE(TAG, "Skipping live data: payload allocation failed: %s", badAlloc.what());
+    } catch (const std::exception& exc) {
+        ESP_LOGE(TAG, "Skipping live data: payload generation failed: %s", exc.what());
     }
+    return false;
 }
 
 void WebApiWsLiveClass::sendDataTaskCb()
@@ -385,10 +466,16 @@ void WebApiWsLiveClass::sendDataTaskCb()
         return;
     }
 
-    sendOnBatteryStats();
+    if (!sendOnBatteryStats()) {
+        return;
+    }
 
     // Loop all inverters
     for (uint8_t i = 0; i < Hoymiles.getNumInverters(); i++) {
+        if (hasWebsocketBackpressure()) {
+            return;
+        }
+
         auto inv = Hoymiles.getInverterByPos(i);
         if (inv == nullptr) {
             continue;
@@ -420,12 +507,16 @@ void WebApiWsLiveClass::sendDataTaskCb()
             String buffer;
             serializeJson(root, buffer);
 
-            _ws.textAll(buffer);
+            if (!sendLiveData(buffer)) {
+                return;
+            }
 
         } catch (const std::bad_alloc& bad_alloc) {
             ESP_LOGE(TAG, "Call to /api/livedata/status temporarely out of resources. Reason: \"%s\".", bad_alloc.what());
+            return;
         } catch (const std::exception& exc) {
             ESP_LOGE(TAG, "Unknown exception in /api/livedata/status. Reason: \"%s\".", exc.what());
+            return;
         }
     }
 }
@@ -549,6 +640,9 @@ void WebApiWsLiveClass::addTotalField(JsonObject& root, const String& name, cons
 void WebApiWsLiveClass::onWebsocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventType type, void* arg, uint8_t* data, size_t len)
 {
     if (type == WS_EVT_CONNECT) {
+        // Live values are replaceable snapshots. Dropping an update is safer than
+        // reconnect loops and unbounded RAM pressure from a slow browser client.
+        client->setCloseClientOnQueueFull(false);
         ESP_LOGD(TAG, "Websocket: [%s][%" PRIu32 "] connect", server->url(), client->id());
     } else if (type == WS_EVT_DISCONNECT) {
         ESP_LOGD(TAG, "Websocket: [%s][%" PRIu32 "] disconnect", server->url(), client->id());

@@ -21,7 +21,9 @@ private:
     static void generateCommonJsonResponse(JsonVariant& root);
 
     void generateOnBatteryJsonResponse(JsonVariant& root, bool all);
-    void sendOnBatteryStats();
+    bool sendOnBatteryStats();
+    bool sendLiveData(const String& buffer);
+    bool hasWebsocketBackpressure();
 
     static void addField(JsonObject& root, std::shared_ptr<InverterAbstract> inv, const ChannelType_t type, const ChannelNum_t channel, const FieldId_t fieldId, String topic = "");
     static void addTotalField(JsonObject& root, const String& name, const float value, const String& unit, const uint8_t digits);
@@ -42,6 +44,10 @@ private:
     uint32_t _lastPublishGridCharger = 0;
     uint32_t _lastPublishBattery = 0;
     uint32_t _lastPublishPowerMeter = 0;
+    uint32_t _lastWebsocketBackpressureLog = 0;
+
+    static constexpr size_t LIVE_WS_MAX_PENDING_MESSAGES = 4;
+    static constexpr uint32_t LIVE_WS_LOG_INTERVAL_MS = 10U * 1000U;
 
     uint32_t _lastPublishStats[INV_MAX_COUNT] = { 0 };
 
